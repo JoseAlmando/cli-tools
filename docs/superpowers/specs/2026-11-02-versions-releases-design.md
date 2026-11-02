@@ -1,6 +1,6 @@
 # Versions, releases and self-update for clt
 
-Status: draft for approval · 2026-11-02
+Status: approved · 2026-11-02
 
 ## Why
 
@@ -95,20 +95,35 @@ Choice [2]:
    `origin`; `origin` (HTTPS, `ssh://` or `git@host:owner/repo` form) is github.com or the current Gitea session's server; the tag does not exist locally
    or on the remote; a token for that host is available. Any failure stops with a message saying what to
    do.
-2. Show the summary and ask the bump question.
-3. Write the new version to the version file.
-4. Update `CHANGELOG.md` at the repo root (created if missing, with a one-line header): a new section at
+2. **Run the project's tests** (see below). If they fail, stop: nothing has been changed yet.
+3. Show the summary and ask the bump question.
+4. Write the new version to the version file.
+5. Update `CHANGELOG.md` at the repo root (created if missing, with a one-line header): a new section at
    the top, `## X.Y.Z - YYYY-MM-DD`, with one bullet per commit subject since the previous tag (oldest
    first, skipping earlier `Release …` commits). With no previous tag, all commits.
-5. Commit both files as `Release X.Y.Z` and create an annotated tag `vX.Y.Z`.
-6. Ask `Push and publish vX.Y.Z to <host>/<owner>/<repo>? [y/N]`. On yes: push the branch and the tag,
+6. Commit both files as `Release X.Y.Z` and create an annotated tag `vX.Y.Z`.
+7. Ask `Push and publish vX.Y.Z to <host>/<owner>/<repo>? [y/N]`. On yes: push the branch and the tag,
    then create the release on the host, named `vX.Y.Z`, with the new changelog section as its notes.
    On no: stop and print the command that finishes later (`clt release --publish`).
+
+Tests before a release:
+
+- Default command: for Python, `python -m pytest` when the project configures pytest (`pytest.ini`,
+  `conftest.py`, or `[tool.pytest` in `pyproject.toml`), else `python -m unittest discover`; `python` is the
+  project's `.venv` interpreter when there is one, else the one on the PATH. For .NET, `dotnet test`.
+- Override per repo in an optional `.clt.json` at the repo root (JSON, so Python 3.9 can read it without
+  `tomllib`): `{"release": {"test_command": ["python", "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+  "test_env": {"PYTHONPATH": "src"}, "version_file": "pyproject.toml"}}`. The command is a list of arguments
+  (no shell, same on every OS); `version_file` is the same as `--version-file`, which wins over it.
+- The tests' output is shown as it runs; a non-zero exit code (including "no tests ran") stops the release.
+- `--skip-tests` skips them and says so in the output; an agent never uses it without the user's go-ahead.
+- This repo gets a `.clt.json` with the command above.
 
 Flags:
 
 | Flag | Effect |
 |---|---|
+| `--skip-tests` | Do not run the tests (printed as a warning). |
 | `--bump fix\|feat\|major` | Skip the question. |
 | `--yes` | Accept the default bump if `--bump` is not given; never asks. |
 | `--no-push` | Stop after the local commit and tag (what an agent runs before asking the user). |
@@ -206,4 +221,5 @@ Flags:
 - Untracked files block a release; remote URLs in HTTPS, `ssh://` and scp-like forms are accepted.
 - CI may use the `astral-sh/setup-uv` action for the `uv tool install` smoke test (CI only, not a runtime dependency).
 - `protect` only for GitHub; Gitea protection is out of scope.
+- Per-repo settings (test command, version file) live in `.clt.json`, one format for every project type.
 - `clt update` installs from git tags with `uv`; no PyPI.
