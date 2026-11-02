@@ -151,7 +151,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
 | `src/cli_tools/clt.py` | The `clt` command. A new tool is added to `TOOLS`. |
 | `tests/` | Tests with `unittest`, with no network or servers. |
 | `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
-| `.github/workflows/tests.yml` | CI: the tests and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
+| `.github/workflows/tests.yml` | CI: the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
+| `.clt.json` | How `clt release` runs this repo's tests. Releases are cut with `clt release`. |
 
 ## License
 

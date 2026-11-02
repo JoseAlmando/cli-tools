@@ -70,9 +70,10 @@ def run_tests(root, argv, env):
                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         raise ToolError(f"Cannot run the tests: {argv[0]} was not found") from None
-    for line in proc.stdout:  # shown as it runs, on stderr so --json output stays clean
-        sys.stderr.write(line)
-    if proc.wait() != 0:
+    with proc:
+        for line in proc.stdout:  # shown as it runs, on stderr so --json output stays clean
+            sys.stderr.write(line)
+    if proc.returncode != 0:
         raise ToolError(f"The tests failed (exit code {proc.returncode}); nothing was changed")
 
 
