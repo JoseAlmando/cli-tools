@@ -89,6 +89,8 @@ clt release --json --publish                                  # only after the u
 
 If `--publish` fails halfway, running it again finishes the job; it skips what is already done.
 
+`clt update --check` is a read; `clt update [VERSION]` reinstalls clt itself, so run it only when the user asks.
+
 ## When something fails
 
 | Exit code / message | What to do |

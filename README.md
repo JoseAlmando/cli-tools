@@ -13,11 +13,27 @@ Command-line tools for the Taiga, Gitea and GitHub APIs, gathered under a single
 
 Requires Python 3.9 or later. It installs three commands: `clt`, which groups the tools, and `taiga` and `gitea` on their own. On Windows they are generated as `.exe` files.
 
+From GitHub, the latest release (or a given one with `@vX.Y.Z`):
+
+```bash
+uv tool install git+https://github.com/JoseAlmando/cli-tools          # or: pipx install git+https://…
+```
+
+To move to another version later:
+
+```bash
+clt update --check          # installed and latest version
+clt update                  # the latest release
+clt update 0.2.0            # a given one, older ones included
+```
+
+On Windows the update finishes in the background a few seconds after `clt update` returns. To uninstall: `uv tool uninstall cli-tools`.
+
+For development, from a clone (changes take effect right away; `clt update` then only reminds you to `git pull`):
+
 ```bash
 uv tool install -e .        # or: pipx install -e .
 ```
-
-With `-e`, changes in the repo take effect right away, without reinstalling. To uninstall: `uv tool uninstall cli-tools`.
 
 Without installing, from the repo:
 
