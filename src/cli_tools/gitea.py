@@ -246,7 +246,8 @@ environment variables:
 
 for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr (also CLT_JSON=1)
-  --read-only       send only GET requests (also CLT_READONLY=1)
+  --read-only       send only GET requests (also CLT_READONLY=1);
+                    login, refresh, logout and token are blocked too
   exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
 """
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Gitea API.", epilog=epilog,
@@ -274,6 +275,7 @@ def main(argv, prog=PROG):
     if not args.command:
         parser.print_help()
         return 2
+    core.check_read_only_command(args.command)
     # logout only deletes the file, so it does not need to know the server
     return args.func(Gitea(getattr(args, "url", None), require_url=args.command != "logout"), args)
 

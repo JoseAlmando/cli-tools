@@ -12,6 +12,8 @@ from pathlib import Path
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 # Global flags, accepted anywhere on the command line (see take_global_flags)
 GLOBAL_FLAGS = ("--json", "--read-only")
+# Commands that change the saved session or print the token; read-only mode blocks them
+SESSION_COMMANDS = ("login", "refresh", "logout", "token")
 MAX_PAGES = 100
 
 # Exit codes: 0 success, 1 error, 2 wrong usage (argparse), 3 not logged in, 4 blocked by read-only mode
@@ -51,6 +53,12 @@ def json_errors():
 def read_only():
     """Only GET requests are sent (--read-only or CLT_READONLY=1)."""
     return env_flag("CLT_READONLY")
+
+
+def check_read_only_command(command):
+    """Read-only mode also blocks the commands that change the saved session or print the token."""
+    if command in SESSION_COMMANDS and read_only():
+        raise ReadOnlyError(f"{command} was not run: read-only mode (--read-only or CLT_READONLY)")
 
 
 def take_global_flags(argv):

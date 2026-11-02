@@ -23,7 +23,7 @@ clt <tool> <METHOD> "<path relative to /api/v1/>" [-d JSON | -d @file.json] [opt
 | Option | Use |
 |---|---|
 | `--json` | Errors as one JSON line on stderr: `{"error", "status", ...}`. Use it always, and parse stderr on failure. |
-| `--read-only` | Only `GET` is sent; any other method exits with code 4 without sending. |
+| `--read-only` | Only `GET` is sent; any other method exits with code 4 without sending. `login`, `refresh`, `logout` and `token` are blocked too. |
 | `--dry-run` | Prints `{"method", "path", "body"}` and sends nothing. |
 | `--fields a,b,c.d` | Keeps only these fields of each object; `c.d` reads a nested field. |
 | `--max-items N` | Keeps the first N items of a list (stderr says how many there were). |

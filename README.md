@@ -21,7 +21,7 @@ With `-e`, changes in the repo take effect right away, without reinstalling. To 
 Without installing, from the repo:
 
 ```bash
-PYTHONPATH=src python -m cli_tools taiga me
+PYTHONPATH=src python3 -m cli_tools taiga me   # python on Windows
 ```
 
 ## Usage
@@ -50,7 +50,7 @@ Every tool can run unattended:
 - **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN` or `GITEA_TOKEN`, and `taiga login --user <u> --password-stdin` reads the password from stdin.
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one.
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
-- **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests, and `--dry-run` prints a request without sending it.
+- **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
 - **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, and `--all` joins every page.
 
 `--json` and `--read-only` can go anywhere on the command line.
@@ -86,7 +86,7 @@ No server is configured by default. Each tool takes it, in this order:
 ## Development
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -t .
+PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
 ```
 
 | Path | Contents |

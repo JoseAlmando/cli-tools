@@ -89,6 +89,37 @@ class ReadOnlyAndDryRunTests(TempConf):
             code, out, _ = run_api(api_args("GET"), lambda m, p, b: (200, '{"ok": true}', {}))
         self.assertEqual((code, json.loads(out)), (0, {"ok": True}))
 
+    def test_read_only_blocks_the_session_commands_of_every_tool(self):
+        env = {"CLT_READONLY": "1", "TAIGA_TOKEN": "secret-taiga", "TAIGA_URL": "https://taiga.example.com",
+               "GITEA_TOKEN": "secret-gitea", "GITEA_URL": "https://gitea.example.com"}
+        for tool in (taiga, gitea):
+            for command in (["login", "--password-stdin", "--user", "bot"] if tool is taiga else ["login", "--no-browser"],
+                            ["refresh"], ["logout"], ["token"]):
+                out = io.StringIO()
+                with self.subTest(tool=tool.PROG, command=command[0]), mock.patch.dict(os.environ, env), \
+                        mock.patch("sys.stdin", io.StringIO("s3cret\n")), contextlib.redirect_stdout(out), \
+                        contextlib.redirect_stderr(io.StringIO()), \
+                        mock.patch.object(core, "send", side_effect=AssertionError("no request should be sent")), \
+                        mock.patch.object(gitea, "wait_for_callback", side_effect=AssertionError("no browser login")):
+                    with self.assertRaisesRegex(core.ReadOnlyError, "read-only"):
+                        tool.main(command)
+                    # Nothing reaches stdout, so no token can leak
+                    self.assertEqual(out.getvalue(), "")
+
+    def test_read_only_logout_keeps_the_saved_session(self):
+        t = taiga.Taiga("https://taiga.example.com")
+        t.save_credentials({"auth_token": "t", "refresh": "r", "username": "bot"})
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(core.ReadOnlyError):
+            taiga.main(["logout"])
+        self.assertTrue(t.credentials_file.exists())
+
+    def test_read_only_still_allows_me(self):
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1", "TAIGA_TOKEN": "t", "TAIGA_URL": "https://taiga.example.com"}), \
+                mock.patch.object(taiga.Taiga, "call", lambda self, m, p, b: (200, '{"username": "bot"}', {})), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(taiga.main(["me"]) or 0, 0)
+        self.assertIn("bot", out.getvalue())
+
     def test_dry_run_prints_the_request_and_sends_nothing(self):
         code, out, _ = run_api(api_args("PATCH", "issues/1", data='{"status": 2}', dry_run=True), no_call)
         self.assertEqual(code, 0)
