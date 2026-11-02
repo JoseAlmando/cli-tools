@@ -101,5 +101,57 @@ class GitHubApiTests(TempConf):
         self.assertTrue(github.GitHub().credentials_file.exists())
 
 
+class ProtectTests(TempConf):
+    def protect(self, existing, *flags):
+        calls = []
+
+        def call(self, method, path, body):
+            calls.append((method, path, json.loads(body) if body else None))
+            return (200, json.dumps(existing), {}) if method == "GET" else (200, '{"id": 1}', {})
+
+        out = io.StringIO()
+        with mock.patch.object(github.GitHub, "call", call), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(io.StringIO()):
+            github.main(["protect", "o/r", *flags])
+        return calls, out.getvalue()
+
+    def test_creates_both_rulesets_when_there_are_none(self):
+        calls, _ = self.protect([])
+        self.assertEqual(calls, [("GET", "repos/o/r/rulesets", None),
+                                 ("POST", "repos/o/r/rulesets", github.RULESETS[0]),
+                                 ("POST", "repos/o/r/rulesets", github.RULESETS[1])])
+
+    def test_the_rulesets_are_the_ones_of_the_design(self):
+        admin = [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+        main, tags = github.RULESETS
+        self.assertEqual(main, {"name": "main", "target": "branch", "enforcement": "active", "bypass_actors": admin,
+                                "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
+                                "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, {"type": "update"}]})
+        self.assertEqual(tags, {"name": "v* tags", "target": "tag", "enforcement": "active", "bypass_actors": admin,
+                                "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+                                "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}]})
+
+    def test_updates_existing_rulesets_by_name(self):
+        calls, _ = self.protect([{"id": 11, "name": "main"}, {"id": 12, "name": "v* tags"}])
+        self.assertEqual([c[:2] for c in calls], [("GET", "repos/o/r/rulesets"), ("PUT", "repos/o/r/rulesets/11"),
+                                                  ("PUT", "repos/o/r/rulesets/12")])
+
+    def test_dry_run_only_reads(self):
+        calls, out = self.protect([{"id": 11, "name": "main"}], "--dry-run")
+        self.assertEqual([c[0] for c in calls], ["GET"])
+        planned = json.loads(out)
+        self.assertEqual([(r["method"], r["path"]) for r in planned],
+                         [("PUT", "repos/o/r/rulesets/11"), ("POST", "repos/o/r/rulesets")])
+        self.assertEqual(planned[1]["body"], github.RULESETS[1])
+
+    def test_read_only_blocks_it(self):
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(core.ReadOnlyError):
+            calls, _ = self.protect([])
+
+    def test_needs_owner_and_repo(self):
+        with self.assertRaisesRegex(ToolError, "OWNER/REPO"), contextlib.redirect_stderr(io.StringIO()):
+            github.main(["protect", "not-a-repo"])
+
+
 if __name__ == "__main__":
     unittest.main()

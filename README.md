@@ -43,6 +43,7 @@ export TAIGA_TOKEN="$(taiga token)"             # for other scripts
 
 clt github login                                # paste a fine-grained personal access token
 clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
+clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin updates main and v* tags
 ```
 
 The GitHub token needs *Contents: read and write* to publish releases, and *Administration: read and write* for `clt github protect`.
