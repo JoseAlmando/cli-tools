@@ -120,6 +120,11 @@ class ReadOnlyAndDryRunTests(TempConf):
             self.assertEqual(taiga.main(["me"]) or 0, 0)
         self.assertIn("bot", out.getvalue())
 
+    def test_require_writes_blocks_only_in_read_only_mode(self):
+        self.assertIsNone(core.require_writes("protect"))
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaisesRegex(core.ReadOnlyError, "protect"):
+            core.require_writes("protect")
+
     def test_dry_run_prints_the_request_and_sends_nothing(self):
         code, out, _ = run_api(api_args("PATCH", "issues/1", data='{"status": 2}', dry_run=True), no_call)
         self.assertEqual(code, 0)

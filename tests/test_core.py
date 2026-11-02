@@ -4,6 +4,7 @@ import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cli_tools import core
 from cli_tools.core import ToolError
@@ -27,6 +28,29 @@ class ApiUrlTests(unittest.TestCase):
         for path in ("https://evil.example/x", "//evil.example/x", "..\\x"):
             with self.subTest(path=path), self.assertRaises(ToolError):
                 core.api_url("https://example.com", path)
+
+    def test_each_tool_can_choose_its_prefix(self):
+        self.assertEqual(core.api_url("https://api.github.com", "user", prefix="/"), "https://api.github.com/user")
+        with self.assertRaisesRegex(ToolError, "https://api.github.com/"):
+            core.api_url("https://api.github.com", "https://evil.example/x", prefix="/")
+
+
+class NextPageTests(unittest.TestCase):
+    def test_with_an_api_root_keeps_only_same_host_pages(self):
+        same = {"Link": '<https://api.github.com/user/repos?page=2>; rel="next"'}
+        other = {"Link": '<https://evil.example/user/repos?page=2>; rel="next"'}
+        self.assertEqual(core.next_page_path(same, api_root="https://api.github.com/"), "user/repos?page=2")
+        self.assertIsNone(core.next_page_path(other, api_root="https://api.github.com/"))
+
+
+class JsonRequestTests(unittest.TestCase):
+    def test_extra_headers_replace_the_defaults(self):
+        with mock.patch.object(core, "send", return_value=(200, "{}", {})) as send:
+            core.json_request("GET", "https://api.github.com/user", None, "t", None,
+                              headers={"Accept": "application/vnd.github+json"})
+        req = send.call_args[0][0]
+        self.assertEqual(req.get_header("Accept"), "application/vnd.github+json")
+        self.assertEqual(req.get_header("Authorization"), "Bearer t")
 
 
 class ResolveUrlTests(unittest.TestCase):

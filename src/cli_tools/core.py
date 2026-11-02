@@ -55,10 +55,16 @@ def read_only():
     return env_flag("CLT_READONLY")
 
 
+def require_writes(what):
+    """Stops anything that would change something while read-only mode is on."""
+    if read_only():
+        raise ReadOnlyError(f"{what} was not run: read-only mode (--read-only or CLT_READONLY)")
+
+
 def check_read_only_command(command):
     """Read-only mode also blocks the commands that change the saved session or print the token."""
-    if command in SESSION_COMMANDS and read_only():
-        raise ReadOnlyError(f"{command} was not run: read-only mode (--read-only or CLT_READONLY)")
+    if command in SESSION_COMMANDS:
+        require_writes(command)
 
 
 def take_global_flags(argv):
@@ -187,11 +193,11 @@ def resolve_url(cli_url, env_url, credentials_file, prog, var):
     return validate_base_url(saved["url"], var)
 
 
-def api_url(base, path):
+def api_url(base, path, prefix="/api/v1/"):
     """Only paths relative to the API: the token never leaves the configured server."""
     if "://" in path or path.startswith("//") or "\\" in path:
-        raise ToolError(f"Only paths relative to {base}/api/v1/ are accepted (got {path!r})")
-    return f"{base}/api/v1/{path.lstrip('/')}"
+        raise ToolError(f"Only paths relative to {base}{prefix} are accepted (got {path!r})")
+    return f"{base}{prefix}{path.lstrip('/')}"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -225,10 +231,12 @@ def send(req, cacert):
         raise ToolError(f"Network error with {server}: {e}") from None
 
 
-def json_request(method, url, body, token, cacert):
+def json_request(method, url, body, token, cacert, headers=None):
     req = urllib.request.Request(url, data=body.encode("utf-8") if isinstance(body, str) else body, method=method)
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept", "application/json")
+    for name, value in (headers or {}).items():
+        req.add_header(name, value)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     return send(req, cacert)
@@ -303,12 +311,12 @@ def read_body(data):
     return body
 
 
-def add_api_parser(sub, prog, example_path, func):
+def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/"):
     p = sub.add_parser("api", help=f"call the API: {prog} [api] METHOD path [-d JSON]",
-                       description="Calls /api/v1/<path> on the configured server. "
+                       description=f"Calls {api_prefix}<path> on the configured server. "
                                    "If the token has expired, it renews it and retries once.")
     p.add_argument("method", metavar="METHOD", type=str.upper, choices=METHODS, help=", ".join(METHODS))
-    p.add_argument("path", metavar="path", help=f"relative to /api/v1/, e.g. {example_path!r}")
+    p.add_argument("path", metavar="path", help=f"relative to {api_prefix}, e.g. {example_path!r}")
     p.add_argument("-d", "--data", metavar="JSON", help="JSON body, @file, or @- for stdin")
     p.add_argument("-r", "--raw", action="store_true", help="print the body exactly as received")
     p.add_argument("-i", "--headers", action="store_true", help="show the status and headers (on stderr)")
@@ -337,21 +345,26 @@ def pick_fields(value, fields):
     return picked
 
 
-def next_page_path(headers):
-    """The next page as a path relative to /api/v1/: Gitea's Link rel="next" or Taiga's x-pagination-next."""
+def next_page_path(headers, api_root=None):
+    """The next page as a path relative to the API: a Link rel="next" or Taiga's x-pagination-next.
+
+    With api_root (e.g. "https://api.github.com/"), the next URL must start with it; otherwise it must be under /api/v1/.
+    """
     headers = {k.lower(): v for k, v in headers.items()}
     url = headers.get("x-pagination-next")
     if not url and "link" in headers:
         for part in headers["link"].split(","):
             if 'rel="next"' in part:
                 url = part.split(";")[0].strip().strip("<>")
+    if api_root:
+        return url[len(api_root):] if url and url.startswith(api_root) else None
     if not url or "/api/v1/" not in url:
         return None
     # Only the path is kept, so the next request still goes to the configured server
     return url.split("/api/v1/", 1)[1]
 
 
-def run_api(args, call):
+def run_api(args, call, next_page=next_page_path):
     """call(method, path, body) -> (status, body, headers), with each tool's token renewal."""
     body = read_body(args.data)
     if args.method != "GET" and read_only():
@@ -364,7 +377,7 @@ def run_api(args, call):
         status, raw, headers = call(args.method, args.path, body)
         pages = [raw]
         path = args.path
-        while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page_path(headers)):
+        while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page(headers)):
             status, raw, headers = call("GET", path, None)
             pages.append(raw)
     except HttpError as e:
