@@ -77,3 +77,7 @@ PYTHONPATH=src python -m unittest discover -s tests -t .
 | `src/cli_tools/taiga.py`, `gitea.py` | Una herramienta por archivo: su login, su renovación de token y sus comandos. |
 | `src/cli_tools/clt.py` | El comando `clt`. Una herramienta nueva se agrega a `TOOLS`. |
 | `tests/` | Tests con `unittest`, sin red ni servidores. |
+
+## Licencia
+
+[MIT](LICENSE) © 2026 José A. Dominique.
