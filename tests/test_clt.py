@@ -18,6 +18,7 @@ class CltTests(TempConf):
             self.assertEqual(clt.main(["--help"]), 0)
         self.assertIn("taiga", buffer.getvalue())
         self.assertIn("gitea", buffer.getvalue())
+        self.assertIn("github", buffer.getvalue())
 
     def test_shows_the_version(self):
         buffer = io.StringIO()

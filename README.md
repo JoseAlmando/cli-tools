@@ -1,12 +1,13 @@
 # cli-tools
 
-Command-line tools for the Taiga and Gitea APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
+Command-line tools for the Taiga, Gitea and GitHub APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
 
 | Command | What it does |
 |---|---|
-| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`. |
+| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`. |
 | `taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
 | `gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
+| `clt github` | GitHub API client: login with a personal access token and calls to `https://api.github.com/`. Only as `clt github` (a standalone `github` command would clash with GitHub Desktop's). |
 
 ## Installation
 
@@ -39,7 +40,12 @@ gitea GET "repos/<owner>/<repo>/pulls?state=open"
 gitea POST repos/<owner>/<repo>/pulls -d @pr.json
 
 export TAIGA_TOKEN="$(taiga token)"             # for other scripts
+
+clt github login                                # paste a fine-grained personal access token
+clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
 ```
+
+The GitHub token needs *Contents: read and write* to publish releases, and *Administration: read and write* for `clt github protect`.
 
 `clt --help`, `taiga --help` and `gitea --help` list the commands and the environment variables.
 
@@ -74,6 +80,8 @@ No server is configured by default. Each tool takes it, in this order:
 | `TAIGA_CONF_DIR`, `GITEA_CONF_DIR` | Credentials folder; by default `~/.config/taiga` and `~/.config/gitea`. |
 | `TAIGA_CACERT`, `GITEA_CACERT` | Optional extra CA, for example an internal one; by default `ca.pem` in the credentials folder. |
 | `GITEA_AUTH_SOURCE` | Gitea external login source to go straight to; empty means Gitea's own login page. |
+| `GITHUB_TOKEN`, `GH_TOKEN` | GitHub token to use instead of the saved session. |
+| `GITHUB_CONF_DIR` | GitHub credentials folder; by default `~/.config/github`. |
 | `GITEA_CLIENT_ID` | Public Gitea OAuth2 app; by default, the one Gitea has built in for `tea`. |
 | `GITEA_CALLBACK_PORT` | Local port for the browser's answer; `38291` by default. |
 | `NO_COLOR` | Turns colors off. |
@@ -92,7 +100,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
 | Path | Contents |
 |---|---|
 | `src/cli_tools/core.py` | The shared parts: HTTP, credentials, output and the `api` subcommand. |
-| `src/cli_tools/taiga.py`, `gitea.py` | One tool per file: its login, its token renewal and its commands. |
+| `src/cli_tools/taiga.py`, `gitea.py`, `github.py` | One tool per file: its login, its token renewal and its commands. |
 | `src/cli_tools/clt.py` | The `clt` command. A new tool is added to `TOOLS`. |
 | `tests/` | Tests with `unittest`, with no network or servers. |
 | `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |

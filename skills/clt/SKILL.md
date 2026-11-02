@@ -1,15 +1,15 @@
 ---
 name: clt
-description: Use the clt command-line tools (clt taiga, clt gitea) to read and change Taiga projects (user stories, issues, tasks) and Gitea repositories (pull requests, branches, issues) through their REST APIs. Use it whenever a task needs data from or changes in Taiga or Gitea, instead of curl or a browser.
+description: Use the clt command-line tools (clt taiga, clt gitea, clt github) to read and change Taiga projects (user stories, issues, tasks) and Gitea or GitHub repositories (pull requests, branches, issues, releases) through their REST APIs. Use it whenever a task needs data from or changes in Taiga, Gitea or GitHub, instead of curl, gh or a browser.
 ---
 
-# clt: Taiga and Gitea from the command line
+# clt: Taiga, Gitea and GitHub from the command line
 
-`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) with the user's saved session. Tokens are renewed automatically. The same tools are also installed as `taiga` and `gitea`.
+`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. The Taiga and Gitea tools are also installed as `taiga` and `gitea`.
 
 ## Before anything else
 
-- **Never log in yourself.** `taiga login` and `gitea login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN`.
+- **Never log in yourself.** `taiga login`, `gitea login` and `clt github login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN` / `GITHUB_TOKEN`.
 - **Read freely, write only with the user's go-ahead.** Run reads with `--read-only` so a mistaken method cannot change anything. Before a `POST`, `PUT`, `PATCH` or `DELETE`, show the request with `--dry-run`, and send it only when the user agrees.
 - **Keep answers small.** Use `--fields` and `--max-items` on lists. Whole Taiga or Gitea objects are large and fill the context.
 - **Never print tokens.** Do not run `taiga token` or `gitea token` unless the user asks for a token for another script.
@@ -67,6 +67,14 @@ Opening a pull request: write the body to a file, build the JSON with `jq`, chec
 jq -n --rawfile body pr.md '{title: "<title>", head: "<branch>", base: "<base>", body: $body}' > pr.json
 clt gitea --json POST "repos/<owner>/<repo>/pulls" -d @pr.json --dry-run
 clt gitea --json POST "repos/<owner>/<repo>/pulls" -d @pr.json --fields number,html_url,mergeable
+```
+
+## GitHub recipes
+
+```bash
+clt github --json --read-only me
+clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title,head.ref,base.ref --all
+clt github --json --read-only GET "repos/<owner>/<repo>/releases" --fields tag_name,name,html_url --max-items 10
 ```
 
 ## When something fails

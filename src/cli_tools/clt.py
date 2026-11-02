@@ -1,18 +1,19 @@
 """clt: one command for every tool (clt taiga ..., clt gitea ...)."""
 import sys
 
-from . import __version__, core, gitea, taiga
+from . import __version__, core, gitea, github, taiga
 
 TOOLS = {
     "taiga": (taiga.main, "client for the Taiga API"),
     "gitea": (gitea.main, "client for the Gitea API, with OAuth2 login in the browser"),
+    "github": (github.main, "client for the GitHub API, with a personal access token"),
 }
 
 
 def usage():
     lines = ["usage: clt TOOL [arguments]", "", "tools:"]
     lines += [f"  {name:<8} {description}" for name, (_, description) in TOOLS.items()]
-    lines += ["", "Each tool has its own help: clt taiga --help, clt gitea --help.",
+    lines += ["", "Each tool has its own help: clt taiga --help, clt github --help.",
               "They are also installed on their own: taiga ..., gitea ...",
               "",
               "for scripts and AI agents (any position on the command line):",
