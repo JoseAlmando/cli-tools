@@ -1,0 +1,1 @@
+{"release": {"test_command": ["python", "-m", "unittest", "discover", "-s", "tests", "-t", "."], "test_env": {"PYTHONPATH": "src"}}}
