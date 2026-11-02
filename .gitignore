@@ -1,0 +1,7 @@
+# Credenciales y certificados locales: nunca van al repo
+credentials.json
+.credentials-*
+*.pem
+.env
+__pycache__/
+*.pyc
