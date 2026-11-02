@@ -13,7 +13,7 @@ import webbrowser
 from pathlib import Path
 
 from . import core
-from .core import ToolError, HttpError, info
+from .core import ToolError, HttpError, NotLoggedIn, info
 
 PROG = "gitea"
 URL_VAR = "GITEA_URL"
@@ -65,9 +65,12 @@ class Gitea:
         })
 
     def load_credentials(self):
+        token = os.environ.get("GITEA_TOKEN")
+        if token:  # e.g. a personal access token; it is used as is and cannot be renewed
+            return {"url": self.url, "access_token": token}
         creds = core.read_json_file(self.credentials_file)
         if creds is None and not self.credentials_file.exists():
-            raise ToolError("Not logged in; run " + core.err.bold(f"{PROG} login"))
+            raise NotLoggedIn("Not logged in; run " + core.err.bold(f"{PROG} login") + " or set GITEA_TOKEN")
         if not isinstance(creds, dict) or not creds.get("access_token"):
             raise ToolError(f"{self.credentials_file} is incomplete; run {PROG} login")
         if creds.get("url") != self.url:
@@ -170,6 +173,8 @@ def wait_for_callback(port, timeout, url, open_browser):
 
 
 def cmd_login(g, args):
+    if not args.no_browser:
+        core.require_terminal(f"{PROG} login")
     verifier, challenge = pkce_pair()
     state = secrets.token_urlsafe(24)
     redirect_uri = f"http://127.0.0.1:{g.callback_port}"
@@ -231,12 +236,18 @@ examples:
 
 environment variables:
   GITEA_URL            server, https only; if unset, the last session's
+  GITEA_TOKEN          use this token (e.g. a personal access token) instead of the saved session
   GITEA_AUTH_SOURCE    Gitea external login source; empty = Gitea's own login page
   GITEA_CLIENT_ID      public Gitea OAuth2 app (default: the one built in for tea)
   GITEA_CALLBACK_PORT  local port for the browser's answer (default {DEFAULT_CALLBACK_PORT})
   GITEA_CONF_DIR       credentials folder (default ~/.config/gitea)
   GITEA_CACERT         extra CA (default ca.pem in the credentials folder)
   NO_COLOR             turns colors off
+
+for scripts and AI agents (any position on the command line):
+  --json            errors as one JSON line on stderr (also CLT_JSON=1)
+  --read-only       send only GET requests (also CLT_READONLY=1)
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
 """
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Gitea API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)

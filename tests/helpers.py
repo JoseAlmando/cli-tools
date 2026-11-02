@@ -10,7 +10,7 @@ class TempConf(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("TAIGA_", "GITEA_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("TAIGA_", "GITEA_", "CLT_"))}
         env.update(TAIGA_CONF_DIR=os.path.join(self.tmp.name, "taiga"), GITEA_CONF_DIR=os.path.join(self.tmp.name, "gitea"))
         patcher = mock.patch.dict(os.environ, env, clear=True)
         patcher.start()

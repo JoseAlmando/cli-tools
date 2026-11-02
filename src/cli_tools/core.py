@@ -10,10 +10,25 @@ import urllib.request
 from pathlib import Path
 
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+# Global flags, accepted anywhere on the command line (see take_global_flags)
+GLOBAL_FLAGS = ("--json", "--read-only")
+MAX_PAGES = 100
+
+# Exit codes: 0 success, 1 error, 2 wrong usage (argparse), 3 not logged in, 4 blocked by read-only mode
+EXIT_ERROR, EXIT_USAGE, EXIT_NOT_LOGGED_IN, EXIT_READ_ONLY = 1, 2, 3, 4
 
 
 class ToolError(Exception):
     """An expected error; run() prints it without a traceback."""
+    exit_code = EXIT_ERROR
+
+
+class NotLoggedIn(ToolError):
+    exit_code = EXIT_NOT_LOGGED_IN
+
+
+class ReadOnlyError(ToolError):
+    exit_code = EXIT_READ_ONLY
 
 
 class HttpError(ToolError):
@@ -22,6 +37,40 @@ class HttpError(ToolError):
         self.status = status
         self.body = body
         self.headers = headers or {}
+
+
+def env_flag(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def json_errors():
+    """Errors as one JSON line on stderr (--json or CLT_JSON=1), for scripts and AI agents."""
+    return env_flag("CLT_JSON")
+
+
+def read_only():
+    """Only GET requests are sent (--read-only or CLT_READONLY=1)."""
+    return env_flag("CLT_READONLY")
+
+
+def take_global_flags(argv):
+    """Removes the global flags from argv and records them in the environment, so they work in any position."""
+    rest = []
+    for arg in argv:
+        if arg == "--json":
+            os.environ["CLT_JSON"] = "1"
+        elif arg == "--read-only":
+            os.environ["CLT_READONLY"] = "1"
+        else:
+            rest.append(arg)
+    return rest
+
+
+def require_terminal(what):
+    """Prompts and browser logins need a person; without a terminal, fail instead of waiting."""
+    if not sys.stdin.isatty():
+        raise ToolError(f"{what} needs a person at a terminal; run it in one, or use a token "
+                        "from the environment (see --help)")
 
 
 # --- Output -------------------------------------------------------------------
@@ -256,15 +305,67 @@ def add_api_parser(sub, prog, example_path, func):
     p.add_argument("-r", "--raw", action="store_true", help="print the body exactly as received")
     p.add_argument("-i", "--headers", action="store_true", help="show the status and headers (on stderr)")
     p.add_argument("-v", "--verbose", action="store_true", help="show the HTTP status code")
+    p.add_argument("--fields", metavar="LIST",
+                   help="keep only these comma-separated fields of each object; dots reach nested ones "
+                        "(e.g. ref,subject,status_extra_info.name)")
+    p.add_argument("--all", action="store_true", help=f"follow the pagination and join the pages (GET, up to {MAX_PAGES})")
+    p.add_argument("--max-items", type=int, metavar="N", help="keep only the first N items of a list")
+    p.add_argument("--dry-run", action="store_true", help="print the request that would be sent and send nothing")
     p.set_defaults(func=func)
+
+
+def pick_fields(value, fields):
+    """Keeps the given fields of an object, or of each object in a list; "a.b" reads a nested field."""
+    if isinstance(value, list):
+        return [pick_fields(item, fields) for item in value]
+    if not isinstance(value, dict):
+        return value
+    picked = {}
+    for field in fields:
+        current = value
+        for part in field.split("."):
+            current = current.get(part) if isinstance(current, dict) else None
+        picked[field] = current
+    return picked
+
+
+def next_page_path(headers):
+    """The next page as a path relative to /api/v1/: Gitea's Link rel="next" or Taiga's x-pagination-next."""
+    headers = {k.lower(): v for k, v in headers.items()}
+    url = headers.get("x-pagination-next")
+    if not url and "link" in headers:
+        for part in headers["link"].split(","):
+            if 'rel="next"' in part:
+                url = part.split(";")[0].strip().strip("<>")
+    if not url or "/api/v1/" not in url:
+        return None
+    # Only the path is kept, so the next request still goes to the configured server
+    return url.split("/api/v1/", 1)[1]
 
 
 def run_api(args, call):
     """call(method, path, body) -> (status, body, headers), with each tool's token renewal."""
     body = read_body(args.data)
+    if args.method != "GET" and read_only():
+        raise ReadOnlyError(f"{args.method} {args.path} was not sent: read-only mode (--read-only or CLT_READONLY)")
+    if args.dry_run:
+        print(json.dumps({"method": args.method, "path": args.path,
+                          "body": json.loads(body) if body else None}, ensure_ascii=False, indent=2))
+        return 0
     try:
         status, raw, headers = call(args.method, args.path, body)
+        pages = [raw]
+        path = args.path
+        while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page_path(headers)):
+            status, raw, headers = call("GET", path, None)
+            pages.append(raw)
     except HttpError as e:
+        if json_errors():
+            detail = e.body if e.body.lstrip().startswith(("{", "[")) else error_detail(e.body)
+            print(json.dumps({"error": error_detail(e.body), "status": e.status, "method": args.method,
+                              "path": args.path, "body": parse_json_or_text(detail)}, ensure_ascii=False),
+                  file=sys.stderr)
+            return EXIT_ERROR
         if args.headers:
             print_headers(e.status, e.headers)
         info(err.red(f"✗ {args.method} {args.path} -> HTTP {e.status}"))
@@ -272,13 +373,35 @@ def run_api(args, call):
             print_response(e.body, args.raw, sys.stderr)
         else:
             info(err.dim(error_detail(e.body)))
-        return 1
+        return EXIT_ERROR
     if args.headers:
         print_headers(status, headers)
     elif args.verbose:
         info(err.green(f"✓ {args.method} {args.path} -> HTTP {status}"))
-    print_response(raw, args.raw)
+    if len(pages) == 1 and not (args.fields or args.max_items):
+        print_response(raw, args.raw)
+        return 0
+    data = [parse_json_or_text(page) for page in pages]
+    if len(pages) > 1:
+        data = [item for page in data for item in (page if isinstance(page, list) else [page])]
+        if len(pages) == MAX_PAGES:
+            info(err.yellow(f"Stopped after {MAX_PAGES} pages; there may be more."))
+    else:
+        data = data[0]
+    if args.max_items is not None and isinstance(data, list) and len(data) > args.max_items:
+        info(err.yellow(f"Showing {args.max_items} of {len(data)} items."))
+        data = data[:args.max_items]
+    if args.fields:
+        data = pick_fields(data, [f.strip() for f in args.fields.split(",") if f.strip()])
+    print_response(json.dumps(data, ensure_ascii=False), args.raw)
     return 0
+
+
+def parse_json_or_text(raw):
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return raw
 
 
 # --- Startup ---------------------------------------------------------------------
@@ -292,10 +415,14 @@ def run(main, argv=None):
     """Runs main(argv) and turns expected errors into exit codes."""
     setup_streams()
     try:
-        return main(sys.argv[1:] if argv is None else argv) or 0
+        return main(take_global_flags(sys.argv[1:] if argv is None else argv)) or 0
     except ToolError as e:
-        info(err.red("✗ ") + str(e))
-        return 1
+        if json_errors():
+            print(json.dumps({"error": str(e), "type": type(e).__name__, "exit_code": e.exit_code,
+                              "status": getattr(e, "status", None)}, ensure_ascii=False), file=sys.stderr)
+        else:
+            info(err.red("✗ ") + str(e))
+        return e.exit_code
     except BrokenPipeError:
         # e.g. "taiga GET ... | head": not an error
         sys.stderr.close()

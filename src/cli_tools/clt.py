@@ -13,7 +13,12 @@ def usage():
     lines = ["usage: clt TOOL [arguments]", "", "tools:"]
     lines += [f"  {name:<8} {description}" for name, (_, description) in TOOLS.items()]
     lines += ["", "Each tool has its own help: clt taiga --help, clt gitea --help.",
-              "They are also installed on their own: taiga ..., gitea ..."]
+              "They are also installed on their own: taiga ..., gitea ...",
+              "",
+              "for scripts and AI agents (any position on the command line):",
+              "  --json        errors as one JSON line on stderr (also CLT_JSON=1)",
+              "  --read-only   send only GET requests (also CLT_READONLY=1)",
+              "  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode"]
     return "\n".join(lines)
 
 

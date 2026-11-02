@@ -43,6 +43,24 @@ export TAIGA_TOKEN="$(taiga token)"             # for other scripts
 
 `clt --help`, `taiga --help` and `gitea --help` list the commands and the environment variables.
 
+## For scripts and AI agents
+
+Every tool can run unattended:
+
+- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN` or `GITEA_TOKEN`, and `taiga login --user <u> --password-stdin` reads the password from stdin.
+- **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one.
+- **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
+- **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests, and `--dry-run` prints a request without sending it.
+- **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, and `--all` joins every page.
+
+`--json` and `--read-only` can go anywhere on the command line.
+
+[`skills/clt/SKILL.md`](skills/clt/SKILL.md) is a skill for Claude Code (and other agents that read skills): it explains these rules and has recipes for the common Taiga and Gitea calls. To use it in Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills && ln -s "$PWD/skills/clt" ~/.claude/skills/clt
+```
+
 ## Configuration
 
 No server is configured by default. Each tool takes it, in this order:
@@ -77,6 +95,7 @@ PYTHONPATH=src python -m unittest discover -s tests -t .
 | `src/cli_tools/taiga.py`, `gitea.py` | One tool per file: its login, its token renewal and its commands. |
 | `src/cli_tools/clt.py` | The `clt` command. A new tool is added to `TOOLS`. |
 | `tests/` | Tests with `unittest`, with no network or servers. |
+| `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
 
 ## License
 

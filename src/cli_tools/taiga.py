@@ -3,10 +3,11 @@ import argparse
 import getpass
 import json
 import os
+import sys
 from pathlib import Path
 
 from . import core
-from .core import ToolError, HttpError, info
+from .core import ToolError, HttpError, NotLoggedIn, info
 
 PROG = "taiga"
 URL_VAR = "TAIGA_URL"
@@ -34,9 +35,12 @@ class Taiga:
                                 {"url": self.url, "auth_token": token, "refresh": auth.get("refresh") or previous_refresh})
 
     def load_credentials(self):
+        token = os.environ.get("TAIGA_TOKEN")
+        if token:  # a token from the environment is used as is; it cannot be renewed
+            return {"url": self.url, "auth_token": token}
         creds = core.read_json_file(self.credentials_file)
         if creds is None and not self.credentials_file.exists():
-            raise ToolError("Not logged in; run " + core.err.bold(f"{PROG} login"))
+            raise NotLoggedIn("Not logged in; run " + core.err.bold(f"{PROG} login") + " or set TAIGA_TOKEN")
         if not isinstance(creds, dict) or not creds.get("auth_token"):
             raise ToolError(f"{self.credentials_file} is incomplete; run {PROG} login")
         if creds.get("url") != self.url:
@@ -70,8 +74,14 @@ class Taiga:
 # --- Commands -----------------------------------------------------------------
 
 def cmd_login(t, args):
-    user = args.user or input(core.err.cyan("Username or email: "))
-    password = getpass.getpass(core.err.cyan("Password: "))
+    if args.password_stdin:
+        if not args.user:
+            raise ToolError("--password-stdin needs --user")
+        user, password = args.user, sys.stdin.readline().rstrip("\r\n")
+    else:
+        core.require_terminal(f"{PROG} login")
+        user = args.user or input(core.err.cyan("Username or email: "))
+        password = getpass.getpass(core.err.cyan("Password: "))
     body = json.dumps({"type": "normal", "username": user, "password": password})
     try:
         _, raw, _ = t.request("POST", "auth", body)
@@ -119,9 +129,15 @@ examples:
 
 environment variables:
   TAIGA_URL         server, https only; if unset, the last session's
+  TAIGA_TOKEN       use this token instead of the saved session (not renewed)
   TAIGA_CONF_DIR    credentials folder (default ~/.config/taiga)
   TAIGA_CACERT      extra CA (default ca.pem in the credentials folder)
   NO_COLOR          turns colors off
+
+for scripts and AI agents (any position on the command line):
+  --json            errors as one JSON line on stderr (also CLT_JSON=1)
+  --read-only       send only GET requests (also CLT_READONLY=1)
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
 """
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Taiga API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -130,6 +146,7 @@ environment variables:
     p = sub.add_parser("login", help="log in and save the credentials")
     p.add_argument("-u", "--user", help="username or email (asked for if missing)")
     p.add_argument("--url", help="Taiga server, e.g. https://taiga.example.com")
+    p.add_argument("--password-stdin", action="store_true", help="read the password from stdin (needs --user)")
     p.set_defaults(func=cmd_login)
 
     sub.add_parser("refresh", help="renew the token without asking for the password").set_defaults(func=cmd_refresh)
