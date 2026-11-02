@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cli-tools"
+version = "0.1.0"
+description = "Herramientas de línea de comandos para APIs de servicios de desarrollo (Taiga, Gitea)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+clt = "cli_tools.clt:run"
+taiga = "cli_tools.taiga:run"
+gitea = "cli_tools.gitea:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]

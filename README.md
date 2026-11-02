@@ -1,22 +1,34 @@
 # cli-tools
 
-Herramientas de línea de comandos para trabajar con las APIs de Taiga y Gitea. Solo usan la librería estándar de Python 3 (3.9 o superior), sin dependencias.
+Herramientas de línea de comandos para trabajar con las APIs de Taiga y Gitea, reunidas bajo un solo comando, `clt`. Solo usan la librería estándar de Python, sin dependencias.
 
 | Comando | Qué hace |
 |---|---|
+| `clt` | Agrupa las herramientas: `clt taiga …`, `clt gitea …`. |
 | `taiga` | Cliente de la API de Taiga: login con usuario y contraseña, renovación automática del token y llamadas `GET/POST/PUT/PATCH/DELETE` a `/api/v1/`. |
 | `gitea` | Cliente de la API de Gitea: login OAuth2 con PKCE en el navegador (también por un proveedor externo de Gitea, como un OIDC), renovación automática del token y llamadas a `/api/v1/`. |
 
 ## Instalación
 
+Necesita Python 3.9 o superior. Instala tres comandos: `clt`, que agrupa las herramientas, y `taiga` y `gitea` sueltos. En Windows se generan como `.exe`.
+
 ```bash
-ln -s "$PWD/scripts/taiga.py" ~/.local/bin/taiga
-ln -s "$PWD/scripts/gitea.py" ~/.local/bin/gitea
+uv tool install -e .        # o: pipx install -e .
+```
+
+Con `-e`, los cambios en el repo se ven al instante, sin reinstalar. Para desinstalar: `uv tool uninstall cli-tools`.
+
+Sin instalar, desde el repo:
+
+```bash
+PYTHONPATH=src python -m cli_tools taiga me
 ```
 
 ## Uso
 
 ```bash
+clt taiga me                                    # igual que: taiga me
+
 taiga login --url https://taiga.example.com     # la primera vez; el servidor queda guardado
 taiga me
 taiga GET "userstories?project=<id>"
@@ -29,7 +41,7 @@ gitea POST repos/<owner>/<repo>/pulls -d @pr.json
 export TAIGA_TOKEN="$(taiga token)"             # para otros scripts
 ```
 
-`taiga --help` y `gitea --help` listan todos los comandos y variables de entorno.
+`clt --help`, `taiga --help` y `gitea --help` listan los comandos y las variables de entorno.
 
 ## Configuración
 
@@ -52,3 +64,16 @@ Ningún servidor viene configurado por defecto. Cada herramienta lo toma, en est
 
 - **Credenciales:** se guardan en `credentials.json`, con permisos `0600`, dentro de una carpeta `0700`, y se escriben de forma atómica. Nunca van al repo.
 - **Token:** solo se envía a rutas relativas de la API del servidor configurado, y no se siguen redirecciones (urllib reenviaría la cabecera `Authorization`).
+
+## Desarrollo
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -t .
+```
+
+| Ruta | Contenido |
+|---|---|
+| `src/cli_tools/core.py` | Lo común: HTTP, credenciales, salida y el subcomando `api`. |
+| `src/cli_tools/taiga.py`, `gitea.py` | Una herramienta por archivo: su login, su renovación de token y sus comandos. |
+| `src/cli_tools/clt.py` | El comando `clt`. Una herramienta nueva se agrega a `TOOLS`. |
+| `tests/` | Tests con `unittest`, sin red ni servidores. |
