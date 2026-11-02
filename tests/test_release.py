@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cli_tools import core, gitrepo, release
-from cli_tools.core import ToolError
-from tests.helpers import GitRepo, run_git
+from cli_tools import core, gitea, github, gitrepo, release
+from cli_tools.core import HttpError, ToolError
+from tests.helpers import GitRepo, TempConf, run_git
 
 PYPROJECT = '[project]\nname = "demo"\nversion = "0.1.0"\n'
 REMOTE = "https://github.com/o/r.git"
@@ -210,6 +210,109 @@ class ReleaseTests(ReleaseRepo):
                                "--skip-tests"], cwd=self.root, env=env, capture_output=True)
         self.assertEqual(done.returncode, 0, done.stderr.decode("utf-8", "replace"))
         self.assertIn("- Añade soporte 🚀", (self.root / "CHANGELOG.md").read_bytes().decode("utf-8"))
+
+
+class FakePublisher:
+    def __init__(self, existing=None, fail_create=False):
+        self.existing = existing
+        self.fail_create = fail_create
+        self.created = []
+
+    def release_url(self, owner, repo, tag):
+        return self.existing
+
+    def create_release(self, owner, repo, tag, body):
+        if self.fail_create:
+            raise ToolError("GitHub is down")
+        self.created.append((owner, repo, tag, body))
+        self.existing = f"https://github.com/{owner}/{repo}/releases/tag/{tag}"
+        return self.existing
+
+
+class PublishTests(ReleaseRepo):
+    def setUp(self):
+        super().setUp()
+        self.publisher = FakePublisher()
+        patcher = mock.patch.object(release, "publisher_for", lambda host: self.publisher)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def remote_has(self, tag):
+        return gitrepo.remote_tag_exists(self.root, tag) and \
+            run_git(self.origin, "rev-parse", "main") == self.git("rev-parse", "HEAD")
+
+    def test_yes_at_the_question_pushes_and_publishes(self):
+        _, out, _ = self.release("--skip-tests", stdin="2\ny\n", tty=True, env={"CLT_JSON": "1"})
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.assertEqual(self.publisher.created, [("o", "r", "v0.2.0", "- feat: add x\n- Fix y")])
+        result = json.loads(out)
+        self.assertEqual((result["pushed"], result["release_url"]),
+                         (True, "https://github.com/o/r/releases/tag/v0.2.0"))
+
+    def test_no_or_enter_at_the_question_keeps_it_local(self):
+        for answer in ("n\n", "\n"):
+            with self.subTest(answer=answer):
+                _, _, err = self.release("--skip-tests", stdin="2\n" + answer, tty=True)
+                self.assertFalse(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
+                self.assertIn("clt release --publish", err)
+                self.assertEqual(self.publisher.created, [])
+                self.git("tag", "-d", "v0.2.0")
+                self.git("reset", "--quiet", "--hard", "origin/main")
+
+    def test_publish_resumes_after_a_failed_release_creation(self):
+        self.publisher.fail_create = True
+        with self.assertRaisesRegex(ToolError, "down"):
+            self.release("--skip-tests", stdin="2\ny\n", tty=True)
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.publisher.fail_create = False
+        _, _, err = self.release("--publish")
+        self.assertEqual(len(self.publisher.created), 1)
+        self.assertIn("releases/tag/v0.2.0", err)
+
+    def test_publish_after_no_push_pushes_and_publishes(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.release("--publish")
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.assertEqual(self.publisher.created[0][2:], ("v0.2.0", "- feat: add x\n- Fix y"))
+
+    def test_publish_when_the_release_exists_creates_nothing(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.publisher.existing = "https://github.com/o/r/releases/tag/v0.2.0"
+        _, _, err = self.release("--publish")
+        self.assertEqual(self.publisher.created, [])
+        self.assertIn("https://github.com/o/r/releases/tag/v0.2.0", err)
+
+    def test_publish_is_blocked_in_read_only_mode(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        with self.assertRaises(core.ReadOnlyError):
+            self.release("--publish", env={"CLT_READONLY": "1"})
+        self.assertFalse(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
+
+
+class PublisherTests(TempConf):
+    def test_github_and_the_gitea_session_host_get_their_client(self):
+        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "t", "GITEA_URL": "https://gitea.example.com",
+                                          "GITEA_TOKEN": "t"}):
+            self.assertIsInstance(release.publisher_for("github.com").client, github.GitHub)
+            self.assertIsInstance(release.publisher_for("gitea.example.com").client, gitea.Gitea)
+            with self.assertRaisesRegex(ToolError, "other.example.com"):
+                release.publisher_for("other.example.com")
+
+    def test_release_url_and_create_release(self):
+        calls = []
+
+        class Client:
+            def call(self, method, path, body):
+                calls.append((method, path, json.loads(body) if body else None))
+                if method == "GET":
+                    raise HttpError(404, '{"message": "Not Found"}')
+                return 201, '{"html_url": "https://h/o/r/releases/tag/v1.0.0"}', {}
+
+        pub = release.Publisher(Client())
+        self.assertIsNone(pub.release_url("o", "r", "v1.0.0"))
+        self.assertEqual(pub.create_release("o", "r", "v1.0.0", "- x"), "https://h/o/r/releases/tag/v1.0.0")
+        self.assertEqual(calls, [("GET", "repos/o/r/releases/tags/v1.0.0", None),
+                                 ("POST", "repos/o/r/releases", {"tag_name": "v1.0.0", "name": "v1.0.0", "body": "- x"})])
 
 
 class DotnetReleaseTests(GitRepo):

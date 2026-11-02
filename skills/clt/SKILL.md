@@ -77,6 +77,18 @@ clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fiel
 clt github --json --read-only GET "repos/<owner>/<repo>/releases" --fields tag_name,name,html_url --max-items 10
 ```
 
+## Releases
+
+`clt release` runs inside the project's repo. Never push or publish without the user's go-ahead, and never use `--skip-tests` unless the user asks for it.
+
+```bash
+clt release --json --dry-run --bump <fix|feat|major>          # show the plan to the user
+clt release --json --bump <fix|feat|major> --yes --no-push    # tests, version, CHANGELOG.md, commit and tag, locally
+clt release --json --publish                                  # only after the user agrees: push and publish
+```
+
+If `--publish` fails halfway, running it again finishes the job; it skips what is already done.
+
 ## When something fails
 
 | Exit code / message | What to do |

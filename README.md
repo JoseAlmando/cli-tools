@@ -50,6 +50,36 @@ The GitHub token needs *Contents: read and write* to publish releases, and *Admi
 
 `clt --help`, `taiga --help` and `gitea --help` list the commands and the environment variables.
 
+## Releasing a project
+
+`clt release` cuts a version of the project in the current folder (a git repo whose `origin` is on github.com or on the server of your `clt gitea` session). Python projects keep their version in `pyproject.toml` (`[project] version`); .NET ones in `Directory.Build.props` or in the single `.csproj` with `<Version>`.
+
+```bash
+clt release            # checks, runs the tests, asks fix / feat / new version (Enter takes the suggestion),
+                       # updates the version and CHANGELOG.md, commits "Release X.Y.Z", tags vX.Y.Z,
+                       # and asks before pushing and publishing the release
+clt release --dry-run  # shows what it would do
+clt release --publish  # finishes a release that was tagged but not pushed or published (safe to repeat)
+```
+
+It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for `BREAKING CHANGE` or `type!:`, and `fix` otherwise.
+
+| Option | Use |
+|---|---|
+| `--bump fix\|feat\|major` | Skips the question. |
+| `--yes` | Never asks: takes the suggestion and does not push. |
+| `--no-push` | Stops after the local commit and tag. |
+| `--skip-tests` | Does not run the tests (says so). |
+| `--version-file PATH` | The file that holds the version, when it is not found on its own. |
+
+Settings per repo go in an optional `.clt.json`:
+
+```json
+{"release": {"test_command": ["python", "-m", "pytest"], "test_env": {"PYTHONPATH": "src"}, "version_file": "VERSION"}}
+```
+
+`python` at the start of `test_command` means the project's interpreter (`.venv` when there is one). Without a `test_command`, Python projects run `pytest` (when configured) or `unittest discover`, and .NET ones `dotnet test`.
+
 ## For scripts and AI agents
 
 Every tool can run unattended:
