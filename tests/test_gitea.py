@@ -68,7 +68,7 @@ class GiteaTests(TempConf):
         g.request = fake
         g.call("GET", "user", None)
         self.assertEqual(seen, ["old", "new"])
-        # Gitea no siempre devuelve un refresh nuevo: se conserva el anterior
+        # Gitea does not always return a new refresh token: the previous one is kept
         self.assertEqual(g.load_credentials()["refresh_token"], "r1")
 
     def test_the_refresh_uses_the_client_the_session_was_created_with(self):

@@ -5,7 +5,7 @@ from unittest import mock
 
 
 class TempConf(unittest.TestCase):
-    """Cada test con su carpeta de credenciales y sin variables de entorno de las herramientas."""
+    """Each test gets its own credentials folder and none of the tools' environment variables."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -1,19 +1,19 @@
-"""clt: un solo comando para todas las herramientas (clt taiga ..., clt gitea ...)."""
+"""clt: one command for every tool (clt taiga ..., clt gitea ...)."""
 import sys
 
 from . import __version__, core, gitea, taiga
 
 TOOLS = {
-    "taiga": (taiga.main, "cliente de la API de Taiga"),
-    "gitea": (gitea.main, "cliente de la API de Gitea, con login OAuth2 en el navegador"),
+    "taiga": (taiga.main, "client for the Taiga API"),
+    "gitea": (gitea.main, "client for the Gitea API, with OAuth2 login in the browser"),
 }
 
 
 def usage():
-    lines = ["uso: clt HERRAMIENTA [argumentos]", "", "herramientas:"]
+    lines = ["usage: clt TOOL [arguments]", "", "tools:"]
     lines += [f"  {name:<8} {description}" for name, (_, description) in TOOLS.items()]
-    lines += ["", "Cada herramienta tiene su ayuda: clt taiga --help, clt gitea --help.",
-              "También se instalan sueltas: taiga ..., gitea ..."]
+    lines += ["", "Each tool has its own help: clt taiga --help, clt gitea --help.",
+              "They are also installed on their own: taiga ..., gitea ..."]
     return "\n".join(lines)
 
 
@@ -27,7 +27,7 @@ def main(argv):
     tool = TOOLS.get(argv[0])
     if tool is None:
         print(usage(), file=sys.stderr)
-        raise core.ToolError(f"No conozco la herramienta {argv[0]!r}")
+        raise core.ToolError(f"Unknown tool {argv[0]!r}")
     return tool[0](argv[1:], prog=f"clt {argv[0]}")
 
 

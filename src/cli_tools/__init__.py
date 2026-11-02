@@ -1,3 +1,3 @@
-"""Herramientas de línea de comandos para APIs de servicios de desarrollo."""
+"""Command-line tools for the APIs of development services."""
 
 __version__ = "0.1.0"

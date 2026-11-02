@@ -61,7 +61,7 @@ class PrivateJsonTests(unittest.TestCase):
             self.assertEqual(core.read_json_file(path), {"a": 1})
             self.assertEqual([p.name for p in path.parent.iterdir()], ["credentials.json"])
 
-    @unittest.skipIf(os.name == "nt", "en Windows la protege la ACL del perfil")
+    @unittest.skipIf(os.name == "nt", "on Windows the user profile's ACL protects it")
     def test_only_the_owner_can_read_the_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "conf" / "credentials.json"
@@ -87,7 +87,7 @@ class BodyTests(unittest.TestCase):
             self.assertIsNone(core.read_body(None))
 
     def test_rejects_a_body_that_is_not_json(self):
-        with self.assertRaisesRegex(ToolError, "no es JSON"):
+        with self.assertRaisesRegex(ToolError, "not valid JSON"):
             core.read_body("{nope")
 
 

@@ -1,4 +1,4 @@
-# Credenciales y certificados locales: nunca van al repo
+# Local credentials and certificates: they never go into the repo
 credentials.json
 .credentials-*
 *.pem

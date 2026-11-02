@@ -1,4 +1,4 @@
-"""Piezas comunes a todas las herramientas: HTTP, credenciales, salida y el subcomando api."""
+"""Shared building blocks for every tool: HTTP, credentials, output and the api subcommand."""
 import json
 import os
 import ssl
@@ -13,7 +13,7 @@ METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
 class ToolError(Exception):
-    """Error esperable; run() lo muestra sin traceback."""
+    """An expected error; run() prints it without a traceback."""
 
 
 class HttpError(ToolError):
@@ -24,14 +24,14 @@ class HttpError(ToolError):
         self.headers = headers or {}
 
 
-# --- Salida -------------------------------------------------------------------
+# --- Output -------------------------------------------------------------------
 
 class Color:
     def __init__(self, stream):
         isatty = getattr(stream, "isatty", None)
         self.enabled = bool(isatty and isatty()) and not os.environ.get("NO_COLOR")
         if self.enabled and os.name == "nt":
-            os.system("")  # activa las secuencias ANSI en la consola de Windows
+            os.system("")  # turns on ANSI escape sequences in the Windows console
 
     def paint(self, code, text):
         return f"\033[{code}m{text}\033[0m" if self.enabled else str(text)
@@ -107,38 +107,38 @@ def print_headers(status, headers):
     info("")
 
 
-# --- Servidor y HTTP ------------------------------------------------------------
+# --- Server and HTTP ------------------------------------------------------------
 
 def validate_base_url(url, var):
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or not parts.hostname:
-        raise ToolError(f"{var} debe ser https://servidor (es {url!r})")
+        raise ToolError(f"{var} must be https://server (it is {url!r})")
     if parts.query or parts.fragment or parts.username or parts.password:
-        raise ToolError(f"{var} no puede llevar usuario, query ni fragmento ({url!r})")
+        raise ToolError(f"{var} cannot carry a user, query or fragment ({url!r})")
     return url.rstrip("/")
 
 
 def resolve_url(cli_url, env_url, credentials_file, prog, var):
-    """Servidor: --url de login, si no la variable de entorno, si no el de la última sesión."""
+    """The server: login's --url, otherwise the environment variable, otherwise the last session's."""
     if cli_url:
         return validate_base_url(cli_url, var)
     if env_url:
         return validate_base_url(env_url, var)
     saved = read_json_file(credentials_file)
     if not isinstance(saved, dict) or not saved.get("url"):
-        raise ToolError(f"No hay servidor configurado; usa {prog} login --url https://servidor o define {var}")
+        raise ToolError(f"No server configured; use {prog} login --url https://server or set {var}")
     return validate_base_url(saved["url"], var)
 
 
 def api_url(base, path):
-    """Solo rutas relativas a la API: el token nunca sale del servidor configurado."""
+    """Only paths relative to the API: the token never leaves the configured server."""
     if "://" in path or path.startswith("//") or "\\" in path:
-        raise ToolError(f"Solo se aceptan rutas relativas a {base}/api/v1/ (recibí {path!r})")
+        raise ToolError(f"Only paths relative to {base}/api/v1/ are accepted (got {path!r})")
     return f"{base}/api/v1/{path.lstrip('/')}"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
-    # urllib reenvía Authorization al seguir redirecciones; no las seguimos
+    # urllib forwards Authorization when it follows a redirect, so redirects are not followed
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
@@ -149,12 +149,12 @@ def ssl_context(cacert):
         try:
             ctx.load_verify_locations(str(cacert))
         except ssl.SSLError as e:
-            raise ToolError(f"El certificado {cacert} no es válido: {e}") from None
+            raise ToolError(f"The certificate {cacert} is not valid: {e}") from None
     return ctx
 
 
 def send(req, cacert):
-    """Devuelve (status, cuerpo, cabeceras). Lanza HttpError o ToolError; nunca termina el programa."""
+    """Returns (status, body, headers). Raises HttpError or ToolError; never exits the program."""
     server = urllib.parse.urlsplit(req.full_url).hostname
     opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context(cacert)), NoRedirect)
     try:
@@ -163,9 +163,9 @@ def send(req, cacert):
     except urllib.error.HTTPError as e:
         raise HttpError(e.code, e.read().decode("utf-8", "replace"), dict(e.headers)) from None
     except urllib.error.URLError as e:
-        raise ToolError(f"Sin conexión con {server}: {e.reason}") from None
-    except (TimeoutError, OSError) as e:
-        raise ToolError(f"Fallo de red con {server}: {e}") from None
+        raise ToolError(f"Cannot connect to {server}: {e.reason}") from None
+    except OSError as e:  # includes TimeoutError
+        raise ToolError(f"Network error with {server}: {e}") from None
 
 
 def json_request(method, url, body, token, cacert):
@@ -178,7 +178,7 @@ def json_request(method, url, body, token, cacert):
 
 
 def error_detail(body):
-    """Siempre devuelve texto, sea cual sea la forma de la respuesta."""
+    """Always returns text, whatever shape the response has."""
     try:
         data = json.loads(body)
     except (ValueError, TypeError):
@@ -195,10 +195,10 @@ def parse_json(raw, what):
     try:
         return json.loads(raw)
     except ValueError:
-        raise ToolError(f"{what}: el servidor no devolvió JSON ({error_detail(raw)})") from None
+        raise ToolError(f"{what}: the server did not return JSON ({error_detail(raw)})") from None
 
 
-# --- Credenciales -------------------------------------------------------------
+# --- Credentials -------------------------------------------------------------
 
 def read_json_file(path):
     try:
@@ -210,10 +210,10 @@ def read_json_file(path):
 
 
 def write_private_json(path, data):
-    """Escribe con permisos 0600 en una carpeta 0700, de forma atómica."""
+    """Writes with 0600 permissions in a 0700 folder, atomically."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":  # en Windows protege la ACL del perfil del usuario
+    if os.name != "nt":  # on Windows the user profile's ACL protects it
         os.chmod(path.parent, 0o700)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".credentials-")
     try:
@@ -225,7 +225,7 @@ def write_private_json(path, data):
         raise
 
 
-# --- Subcomando api ---------------------------------------------------------------
+# --- The api subcommand ------------------------------------------------------------
 
 def read_body(data):
     if data is None:
@@ -238,29 +238,29 @@ def read_body(data):
         else:
             body = data
     except OSError as e:
-        raise ToolError(f"No se pudo leer el cuerpo {data}: {e}") from None
+        raise ToolError(f"Could not read the body {data}: {e}") from None
     try:
         json.loads(body)
     except ValueError as e:
-        raise ToolError(f"El cuerpo -d no es JSON válido: {e}") from None
+        raise ToolError(f"The -d body is not valid JSON: {e}") from None
     return body
 
 
 def add_api_parser(sub, prog, example_path, func):
-    p = sub.add_parser("api", help=f"llama a la API: {prog} [api] MÉTODO ruta [-d JSON]",
-                       description="Llama a /api/v1/<ruta> del servidor configurado. "
-                                   "Si el token venció, lo renueva y reintenta una vez.")
-    p.add_argument("method", metavar="MÉTODO", type=str.upper, choices=METHODS, help=", ".join(METHODS))
-    p.add_argument("path", metavar="ruta", help=f"relativa a /api/v1/, p. ej. {example_path!r}")
-    p.add_argument("-d", "--data", metavar="JSON", help="cuerpo JSON, @archivo o @- para stdin")
-    p.add_argument("-r", "--raw", action="store_true", help="imprime el cuerpo tal cual llega")
-    p.add_argument("-i", "--headers", action="store_true", help="muestra estado y cabeceras (en stderr)")
-    p.add_argument("-v", "--verbose", action="store_true", help="muestra el código HTTP")
+    p = sub.add_parser("api", help=f"call the API: {prog} [api] METHOD path [-d JSON]",
+                       description="Calls /api/v1/<path> on the configured server. "
+                                   "If the token has expired, it renews it and retries once.")
+    p.add_argument("method", metavar="METHOD", type=str.upper, choices=METHODS, help=", ".join(METHODS))
+    p.add_argument("path", metavar="path", help=f"relative to /api/v1/, e.g. {example_path!r}")
+    p.add_argument("-d", "--data", metavar="JSON", help="JSON body, @file, or @- for stdin")
+    p.add_argument("-r", "--raw", action="store_true", help="print the body exactly as received")
+    p.add_argument("-i", "--headers", action="store_true", help="show the status and headers (on stderr)")
+    p.add_argument("-v", "--verbose", action="store_true", help="show the HTTP status code")
     p.set_defaults(func=func)
 
 
 def run_api(args, call):
-    """call(método, ruta, cuerpo) -> (status, cuerpo, cabeceras), con la renovación del token de cada herramienta."""
+    """call(method, path, body) -> (status, body, headers), with each tool's token renewal."""
     body = read_body(args.data)
     try:
         status, raw, headers = call(args.method, args.path, body)
@@ -281,15 +281,15 @@ def run_api(args, call):
     return 0
 
 
-# --- Arranque ---------------------------------------------------------------------
+# --- Startup ---------------------------------------------------------------------
 
 def with_api_shortcut(argv):
-    """Atajo: "<herramienta> GET ruta" equivale a "<herramienta> api GET ruta"."""
+    """Shortcut: "<tool> GET path" is the same as "<tool> api GET path"."""
     return ["api"] + argv if argv and argv[0].upper() in METHODS else argv
 
 
 def run(main, argv=None):
-    """Ejecuta main(argv) y traduce los errores esperables a códigos de salida."""
+    """Runs main(argv) and turns expected errors into exit codes."""
     setup_streams()
     try:
         return main(sys.argv[1:] if argv is None else argv) or 0
@@ -297,7 +297,7 @@ def run(main, argv=None):
         info(err.red("✗ ") + str(e))
         return 1
     except BrokenPipeError:
-        # p. ej. "taiga GET ... | head": no es un error
+        # e.g. "taiga GET ... | head": not an error
         sys.stderr.close()
         return 0
     except KeyboardInterrupt:

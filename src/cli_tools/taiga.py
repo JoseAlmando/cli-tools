@@ -1,4 +1,4 @@
-"""Cliente de línea de comandos para la API de Taiga."""
+"""Command-line client for the Taiga API."""
 import argparse
 import getpass
 import json
@@ -16,7 +16,7 @@ class Taiga:
     def __init__(self, url=None, require_url=True):
         self.conf_dir = Path(os.environ.get("TAIGA_CONF_DIR") or Path.home() / ".config" / "taiga")
         self.credentials_file = self.conf_dir / "credentials.json"
-        # CA adicional opcional (p. ej. una CA interna); si no existe se usa el almacén del sistema
+        # Optional extra CA (e.g. an internal one); without it the system store is used
         self.cacert = Path(os.environ.get("TAIGA_CACERT") or self.conf_dir / "ca.pem")
         env_url = os.environ.get(URL_VAR, "").rstrip("/")
         self.url = core.resolve_url(url, env_url, self.credentials_file, PROG, URL_VAR) if require_url else None
@@ -24,27 +24,27 @@ class Taiga:
     def request(self, method, path, body=None, token=None):
         return core.json_request(method, core.api_url(self.url, path), body, token, self.cacert)
 
-    # --- Credenciales ---
+    # --- Credentials ---
 
     def save_credentials(self, auth, previous_refresh=""):
         token = auth.get("auth_token") if isinstance(auth, dict) else None
         if not isinstance(token, str) or not token:
-            raise ToolError("La respuesta de autenticación no trae auth_token")
+            raise ToolError("The authentication response has no auth_token")
         core.write_private_json(self.credentials_file,
                                 {"url": self.url, "auth_token": token, "refresh": auth.get("refresh") or previous_refresh})
 
     def load_credentials(self):
         creds = core.read_json_file(self.credentials_file)
         if creds is None and not self.credentials_file.exists():
-            raise ToolError("No hay sesión; corre " + core.err.bold(f"{PROG} login"))
+            raise ToolError("Not logged in; run " + core.err.bold(f"{PROG} login"))
         if not isinstance(creds, dict) or not creds.get("auth_token"):
-            raise ToolError(f"{self.credentials_file} está incompleto; corre {PROG} login")
+            raise ToolError(f"{self.credentials_file} is incomplete; run {PROG} login")
         if creds.get("url") != self.url:
-            raise ToolError(f"La sesión guardada es de {creds.get('url')}, no de {self.url}; corre {PROG} login")
+            raise ToolError(f"The saved session is for {creds.get('url')}, not {self.url}; run {PROG} login")
         return creds
 
     def refresh(self, creds):
-        """True si renovó; False si el servidor rechazó el refresh. Otros fallos se propagan."""
+        """True if it renewed the token; False if the server rejected the refresh. Other failures propagate."""
         if not creds.get("refresh"):
             return False
         try:
@@ -53,7 +53,7 @@ class Taiga:
             if e.status in (400, 401, 403):
                 return False
             raise
-        self.save_credentials(core.parse_json(raw, "Renovar token"), creds["refresh"])
+        self.save_credentials(core.parse_json(raw, "Renewing the token"), creds["refresh"])
         return True
 
     def call(self, method, path, body):
@@ -63,34 +63,34 @@ class Taiga:
         except HttpError as e:
             if e.status != 401 or not self.refresh(creds):
                 raise
-            info(core.err.dim("El servidor respondió 401; token renovado y petición reintentada."))
+            info(core.err.dim("The server answered 401; token renewed and request retried."))
             return self.request(method, path, body, self.load_credentials()["auth_token"])
 
 
-# --- Comandos -----------------------------------------------------------------
+# --- Commands -----------------------------------------------------------------
 
 def cmd_login(t, args):
-    user = args.user or input(core.err.cyan("Usuario o correo: "))
-    password = getpass.getpass(core.err.cyan("Contraseña: "))
+    user = args.user or input(core.err.cyan("Username or email: "))
+    password = getpass.getpass(core.err.cyan("Password: "))
     body = json.dumps({"type": "normal", "username": user, "password": password})
     try:
         _, raw, _ = t.request("POST", "auth", body)
     except HttpError as e:
-        raise ToolError(f"Error al iniciar sesión: {core.error_detail(e.body)}") from None
-    data = core.parse_json(raw, "Iniciar sesión")
+        raise ToolError(f"Login failed: {core.error_detail(e.body)}") from None
+    data = core.parse_json(raw, "Logging in")
     t.save_credentials(data)
-    info(core.err.green("✓ ") + f"Sesión iniciada en {t.url} como {core.err.bold(data.get('username', user))}")
+    info(core.err.green("✓ ") + f"Logged in to {t.url} as {core.err.bold(data.get('username', user))}")
 
 
 def cmd_refresh(t, args):
     if not t.refresh(t.load_credentials()):
-        raise ToolError("El servidor rechazó la renovación; corre " + core.err.bold(f"{PROG} login"))
-    info(core.err.green("✓ ") + "Token renovado.")
+        raise ToolError("The server rejected the renewal; run " + core.err.bold(f"{PROG} login"))
+    info(core.err.green("✓ ") + "Token renewed.")
 
 
 def cmd_logout(t, args):
     t.credentials_file.unlink(missing_ok=True)
-    info(core.err.green("✓ ") + "Sesión cerrada.")
+    info(core.err.green("✓ ") + "Logged out.")
 
 
 def cmd_token(t, args):
@@ -99,43 +99,43 @@ def cmd_token(t, args):
 
 def cmd_me(t, args):
     _, raw, _ = t.call("GET", "users/me", None)
-    me = core.parse_json(raw, "Consultar usuario")
+    me = core.parse_json(raw, "Getting the user")
     if not isinstance(me, dict):
-        raise ToolError("Respuesta inesperada de users/me")
-    print(f"{core.out.bold(me.get('full_name_display', ''))} ({core.out.cyan(me.get('username', '?'))}) en {t.url}")
-    print(core.out.dim(f"Credenciales: {t.credentials_file}"))
+        raise ToolError("Unexpected response from users/me")
+    print(f"{core.out.bold(me.get('full_name_display', ''))} ({core.out.cyan(me.get('username', '?'))}) on {t.url}")
+    print(core.out.dim(f"Credentials: {t.credentials_file}"))
 
 
 def build_parser(prog=PROG):
     epilog = f"""\
-ejemplos:
-  {prog} login --url https://taiga.example.com      # la primera vez; después basta con {prog} login
+examples:
+  {prog} login --url https://taiga.example.com      # the first time; after that, {prog} login is enough
   {prog} me
   {prog} GET "userstories?project=<id>"
-  {prog} GET "userstories?project=<id>&page=2" -i   # ver cabeceras x-pagination-*
-  {prog} PATCH userstories/123 -d '{{"version": 4, "subject": "Nuevo título"}}'
-  {prog} POST tasks -d @tarea.json
-  export TAIGA_TOKEN="$({prog} token)"               # para otros scripts
+  {prog} GET "userstories?project=<id>&page=2" -i   # see the x-pagination-* headers
+  {prog} PATCH userstories/123 -d '{{"version": 4, "subject": "New title"}}'
+  {prog} POST tasks -d @task.json
+  export TAIGA_TOKEN="$({prog} token)"               # for other scripts
 
-variables de entorno:
-  TAIGA_URL         servidor, solo https; si falta, el de la última sesión
-  TAIGA_CONF_DIR    carpeta de credenciales (por defecto ~/.config/taiga)
-  TAIGA_CACERT      CA adicional (por defecto ca.pem en la carpeta de credenciales)
-  NO_COLOR          desactiva los colores
+environment variables:
+  TAIGA_URL         server, https only; if unset, the last session's
+  TAIGA_CONF_DIR    credentials folder (default ~/.config/taiga)
+  TAIGA_CACERT      extra CA (default ca.pem in the credentials folder)
+  NO_COLOR          turns colors off
 """
-    parser = argparse.ArgumentParser(prog=prog, description="Cliente de la API de Taiga.", epilog=epilog,
+    parser = argparse.ArgumentParser(prog=prog, description="Client for the Taiga API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest="command", metavar="COMANDO")
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="inicia sesión y guarda las credenciales")
-    p.add_argument("-u", "--user", help="usuario o correo (si falta, se pregunta)")
-    p.add_argument("--url", help="servidor de Taiga, p. ej. https://taiga.example.com")
+    p = sub.add_parser("login", help="log in and save the credentials")
+    p.add_argument("-u", "--user", help="username or email (asked for if missing)")
+    p.add_argument("--url", help="Taiga server, e.g. https://taiga.example.com")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("refresh", help="renueva el token sin pedir contraseña").set_defaults(func=cmd_refresh)
-    sub.add_parser("logout", help="borra las credenciales guardadas").set_defaults(func=cmd_logout)
-    sub.add_parser("me", help="muestra el usuario con sesión iniciada").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="imprime el token de acceso").set_defaults(func=cmd_token)
+    sub.add_parser("refresh", help="renew the token without asking for the password").set_defaults(func=cmd_refresh)
+    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
+    sub.add_parser("token", help="print the access token").set_defaults(func=cmd_token)
     core.add_api_parser(sub, prog, "userstories?project=<id>", lambda t, args: core.run_api(args, t.call))
     return parser
 
@@ -146,7 +146,7 @@ def main(argv, prog=PROG):
     if not args.command:
         parser.print_help()
         return 2
-    # logout solo borra el archivo: no necesita saber el servidor
+    # logout only deletes the file, so it does not need to know the server
     return args.func(Taiga(getattr(args, "url", None), require_url=args.command != "logout"), args)
 
 
