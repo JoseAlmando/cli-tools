@@ -16,7 +16,7 @@ def usage():
               "They are also installed on their own: taiga ..., gitea ...",
               "",
               "for scripts and AI agents (any position on the command line):",
-              "  --json        errors as one JSON line on stderr (also CLT_JSON=1)",
+              "  --json        errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)",
               "  --read-only   send only GET requests (also CLT_READONLY=1);",
               "                login, refresh, logout and token are blocked too",
               "  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode"]

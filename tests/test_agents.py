@@ -34,14 +34,14 @@ class GlobalFlagsTests(TempConf):
     def test_are_taken_from_any_position(self):
         rest = core.take_global_flags(["GET", "--json", "items", "--read-only", "-r"])
         self.assertEqual(rest, ["GET", "items", "-r"])
-        self.assertTrue(core.json_errors())
+        self.assertTrue(core.json_mode())
         self.assertTrue(core.read_only())
 
     def test_can_also_come_from_the_environment(self):
         with mock.patch.dict(os.environ, {"CLT_JSON": "1", "CLT_READONLY": "true"}):
-            self.assertTrue(core.json_errors())
+            self.assertTrue(core.json_mode())
             self.assertTrue(core.read_only())
-        self.assertFalse(core.json_errors())
+        self.assertFalse(core.json_mode())
         self.assertFalse(core.read_only())
 
 
@@ -158,6 +158,42 @@ class OutputSizeTests(TempConf):
         self.assertEqual(json.loads(out), [{"n": 1}, {"n": 2}, {"n": 3}])
         # Only the path of the next page is used, so a foreign host in the header is never contacted
         self.assertEqual(seen, ["items", "items?page=2", "items?page=3"])
+
+
+class MeJsonTests(TempConf):
+    def run_me(self, tool, body, env):
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out), \
+                mock.patch.object(tool.Taiga if tool is taiga else tool.Gitea, "call",
+                                  lambda self, m, p, b: (200, json.dumps(body), {})):
+            tool.main(["me"])
+        return out.getvalue()
+
+    def test_taiga_me_prints_one_json_object(self):
+        t = taiga.Taiga("https://taiga.example.com")
+        t.save_credentials({"auth_token": "secret-token", "refresh": "r"})
+        out = self.run_me(taiga, {"id": 7, "username": "bot", "full_name_display": "Bot User", "email": "bot@example.com"},
+                          {"CLT_JSON": "1"})
+        self.assertEqual(json.loads(out), {"id": 7, "username": "bot", "full_name": "Bot User", "email": "bot@example.com",
+                                           "url": "https://taiga.example.com", "credentials_file": str(t.credentials_file)})
+        self.assertNotIn("secret-token", out)
+
+    def test_gitea_me_prints_one_json_object_with_the_expiry(self):
+        g = gitea.Gitea("https://gitea.example.com")
+        g.save_credentials({"access_token": "secret-token", "refresh_token": "r", "expires_in": 3600})
+        out = self.run_me(gitea, {"id": 3, "login": "bot", "full_name": "Bot User", "email": "bot@example.com"},
+                          {"CLT_JSON": "1"})
+        me = json.loads(out)
+        self.assertEqual({k: v for k, v in me.items() if k != "expires_at"},
+                         {"id": 3, "username": "bot", "full_name": "Bot User", "email": "bot@example.com",
+                          "url": "https://gitea.example.com", "credentials_file": str(g.credentials_file)})
+        self.assertIsInstance(me["expires_at"], int)
+        self.assertNotIn("secret-token", out)
+
+    def test_a_session_from_the_environment_has_no_credentials_file(self):
+        out = self.run_me(taiga, {"id": 7, "username": "bot"},
+                          {"CLT_JSON": "1", "TAIGA_TOKEN": "t", "TAIGA_URL": "https://taiga.example.com"})
+        self.assertIsNone(json.loads(out)["credentials_file"])
 
 
 class NonInteractiveTests(TempConf):

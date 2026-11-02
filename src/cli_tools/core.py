@@ -45,8 +45,8 @@ def env_flag(name):
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
 
 
-def json_errors():
-    """Errors as one JSON line on stderr (--json or CLT_JSON=1), for scripts and AI agents."""
+def json_mode():
+    """--json or CLT_JSON=1, for scripts and AI agents: errors as one JSON line on stderr, and me as JSON."""
     return env_flag("CLT_JSON")
 
 
@@ -368,7 +368,7 @@ def run_api(args, call):
             status, raw, headers = call("GET", path, None)
             pages.append(raw)
     except HttpError as e:
-        if json_errors():
+        if json_mode():
             detail = e.body if e.body.lstrip().startswith(("{", "[")) else error_detail(e.body)
             print(json.dumps({"error": error_detail(e.body), "status": e.status, "method": args.method,
                               "path": args.path, "body": parse_json_or_text(detail)}, ensure_ascii=False),
@@ -425,7 +425,7 @@ def run(main, argv=None):
     try:
         return main(take_global_flags(sys.argv[1:] if argv is None else argv)) or 0
     except ToolError as e:
-        if json_errors():
+        if json_mode():
             print(json.dumps({"error": str(e), "type": type(e).__name__, "exit_code": e.exit_code,
                               "status": getattr(e, "status", None)}, ensure_ascii=False), file=sys.stderr)
         else:

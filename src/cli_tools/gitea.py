@@ -3,6 +3,7 @@ import argparse
 import base64
 import hashlib
 import http.server
+import json
 import os
 import secrets
 import threading
@@ -216,8 +217,14 @@ def cmd_me(g, args):
     me = core.parse_json(raw, "Getting the user")
     if not isinstance(me, dict):
         raise ToolError("Unexpected response from user")
-    print(f"{core.out.bold(me.get('full_name') or me.get('login', ''))} ({core.out.cyan(me.get('login', '?'))}) on {g.url}")
     expires_at = g.load_credentials().get("expires_at")
+    if core.json_mode():
+        from_env = bool(os.environ.get("GITEA_TOKEN"))
+        print(json.dumps({"id": me.get("id"), "username": me.get("login"), "full_name": me.get("full_name"),
+                          "email": me.get("email"), "url": g.url, "expires_at": expires_at,
+                          "credentials_file": None if from_env else str(g.credentials_file)}, ensure_ascii=False))
+        return
+    print(f"{core.out.bold(me.get('full_name') or me.get('login', ''))} ({core.out.cyan(me.get('login', '?'))}) on {g.url}")
     if isinstance(expires_at, int):
         print(core.out.dim(f"Token valid until {time.strftime('%Y-%m-%d %H:%M', time.localtime(expires_at))}"))
     print(core.out.dim(f"Credentials: {g.credentials_file}"))
@@ -245,7 +252,7 @@ environment variables:
   NO_COLOR             turns colors off
 
 for scripts and AI agents (any position on the command line):
-  --json            errors as one JSON line on stderr (also CLT_JSON=1)
+  --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, refresh, logout and token are blocked too
   exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode

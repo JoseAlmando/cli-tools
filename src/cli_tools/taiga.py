@@ -112,6 +112,12 @@ def cmd_me(t, args):
     me = core.parse_json(raw, "Getting the user")
     if not isinstance(me, dict):
         raise ToolError("Unexpected response from users/me")
+    if core.json_mode():
+        from_env = bool(os.environ.get("TAIGA_TOKEN"))
+        print(json.dumps({"id": me.get("id"), "username": me.get("username"), "full_name": me.get("full_name_display"),
+                          "email": me.get("email"), "url": t.url,
+                          "credentials_file": None if from_env else str(t.credentials_file)}, ensure_ascii=False))
+        return
     print(f"{core.out.bold(me.get('full_name_display', ''))} ({core.out.cyan(me.get('username', '?'))}) on {t.url}")
     print(core.out.dim(f"Credentials: {t.credentials_file}"))
 
@@ -135,7 +141,7 @@ environment variables:
   NO_COLOR          turns colors off
 
 for scripts and AI agents (any position on the command line):
-  --json            errors as one JSON line on stderr (also CLT_JSON=1)
+  --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, refresh, logout and token are blocked too
   exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
