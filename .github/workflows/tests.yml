@@ -1,0 +1,53 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.9", "3.14"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t . -v
+        env:
+          PYTHONPATH: src
+
+      - name: Install the commands
+        run: python -m pip install .
+
+      # The installed commands (.exe files on Windows) start, and the exit codes hold without any network
+      - name: Smoke test
+        env:
+          TAIGA_CONF_DIR: ${{ runner.temp }}/taiga
+          GITEA_CONF_DIR: ${{ runner.temp }}/gitea
+          TAIGA_URL: https://taiga.example.com
+          GITEA_URL: https://gitea.example.com
+        run: |
+          expect() { local want=$1; shift; set +e; "$@"; local got=$?; set -e
+                     [ "$got" -eq "$want" ] || { echo "::error::$* exited $got, expected $want"; exit 1; }; }
+          clt --version
+          taiga --help > /dev/null
+          gitea --help > /dev/null
+          expect 3 clt taiga --json me
+          expect 3 clt gitea --json me
+          TAIGA_TOKEN=t expect 4 taiga --json --read-only POST tasks -d '{}'
+          GITEA_TOKEN=t expect 4 gitea --json --read-only token
