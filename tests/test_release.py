@@ -116,6 +116,28 @@ class ReleaseTests(ReleaseRepo):
                 self.git("branch", "-D", "other") if name == "branch" else None
                 self.git("tag", "-d", "v0.2.0") if name == "local tag" else None
 
+    def test_a_failed_commit_undoes_the_version_change(self):
+        hooks = Path(self.git("config", "core.hooksPath"))
+        hooks.mkdir(exist_ok=True)
+        hook = hooks / "pre-commit"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        before = self.state()
+        with self.assertRaisesRegex(ToolError, "undone"):
+            self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.assertEqual(self.state(), before)
+        self.assertFalse((self.root / "CHANGELOG.md").exists())
+
+    def test_a_missing_git_identity_stops_before_any_change(self):
+        empty = Path(self.tmp.name) / "empty.gitconfig"
+        empty.write_text("")
+        self.git("config", "--unset", "user.email")
+        before = self.state()
+        with self.assertRaisesRegex(ToolError, "user.email"):
+            self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests",
+                         env={"GIT_CONFIG_GLOBAL": str(empty), "GIT_CONFIG_NOSYSTEM": "1"})
+        self.assertEqual(self.state(), before)
+
     def test_behind_origin_stops(self):
         other = Path(self.tmp.name) / "other"
         run_git(self.tmp.name, "clone", "--quiet", str(self.origin), str(other))
@@ -282,6 +304,24 @@ class PublishTests(ReleaseRepo):
         self.assertEqual(self.publisher.created, [])
         self.assertIn("https://github.com/o/r/releases/tag/v0.2.0", err)
 
+    def test_publish_pushes_only_up_to_the_tag(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        tagged = self.git("rev-parse", "v0.2.0^{commit}")
+        self.commit("WIP: not for release")
+        self.release("--publish")
+        self.assertEqual(run_git(self.origin, "rev-parse", "main"), tagged)
+        self.assertTrue(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
+
+    def test_a_failed_publish_says_how_to_finish(self):
+        self.publisher.fail_create = True
+        with self.assertRaisesRegex(ToolError, "clt release --publish"):
+            self.release("--skip-tests", stdin="2\ny\n", tty=True)
+
+    def test_nothing_to_release_points_to_an_unpublished_tag(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        with self.assertRaisesRegex(ToolError, "v0.2.0.*clt release --publish"):
+            self.release("--yes", "--no-push", "--skip-tests")
+
     def test_publish_is_blocked_in_read_only_mode(self):
         self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
         with self.assertRaises(core.ReadOnlyError):
@@ -330,7 +370,18 @@ class DotnetReleaseTests(GitRepo):
 
 
 class TestCommandTests(GitRepo):
+    def test_the_python_on_the_path_runs_the_tests(self):
+        with mock.patch.object(release.shutil, "which", lambda name: "/opt/py/python" if name == "python" else None):
+            self.assertEqual(release.test_command(self.root, {}, "python")[0][0], "/opt/py/python")
+            self.assertEqual(release.test_command(self.root, {"test_command": ["python", "-m", "x"]}, "python")[0],
+                             ["/opt/py/python", "-m", "x"])
+        with mock.patch.object(release.shutil, "which", lambda name: "/usr/bin/python3" if name == "python3" else None):
+            self.assertEqual(release.test_command(self.root, {}, "python")[0][0], "/usr/bin/python3")
+
     def test_python_defaults_and_overrides(self):
+        which = mock.patch.object(release.shutil, "which", lambda name: None)
+        which.start()
+        self.addCleanup(which.stop)
         self.assertEqual(release.test_command(self.root, {}, "python"),
                          ([sys.executable, "-m", "unittest", "discover"], {}))
         (self.root / "pytest.ini").write_text("[pytest]\n")

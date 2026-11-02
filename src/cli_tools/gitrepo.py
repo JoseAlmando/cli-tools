@@ -32,7 +32,8 @@ def parse_remote(url):
     found = re.fullmatch(r"[^/@]+@([^/:]+):([^/]+)/([^/]+?)(\.git)?/?", url)
     if found:
         return found.group(1), found.group(2), found.group(3)
-    raise ToolError(f"Cannot tell the host, owner and repo from the remote URL {url!r}")
+    shown = re.sub(r"//[^/@]*@", "//", url)  # never echo credentials embedded in the URL
+    raise ToolError(f"Cannot tell the host, owner and repo from the remote URL {shown!r}")
 
 
 def default_branch(root):

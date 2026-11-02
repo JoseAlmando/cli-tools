@@ -72,6 +72,15 @@ class FindVersionFileTests(unittest.TestCase):
         self.assertIn("A.csproj", str(caught.exception))
         self.assertIn("B.csproj", str(caught.exception))
 
+    def test_a_csproj_that_is_not_utf8_is_skipped_or_named(self):
+        legacy = self.root / "Legacy" / "Legacy.csproj"
+        legacy.parent.mkdir()
+        legacy.write_bytes("<Project><Company>Señor</Company><Version>1.0.0</Version></Project>".encode("cp1252"))
+        path = self.write("App/App.csproj", CSPROJ)
+        self.assertEqual(versions.find_version_file(self.root).path, path)
+        with self.assertRaisesRegex(ToolError, "Legacy.csproj.*UTF-8"):
+            versions.find_version_file(self.root, "Legacy/Legacy.csproj").read()
+
     def test_nothing_found_lists_what_was_looked_for(self):
         with self.assertRaisesRegex(ToolError, "pyproject.toml.*Directory.Build.props.*csproj"):
             versions.find_version_file(self.root)

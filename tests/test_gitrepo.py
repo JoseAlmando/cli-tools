@@ -15,6 +15,12 @@ class ParseRemoteTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(gitrepo.parse_remote(url), ("github.com", "o", "r"))
 
+    def test_an_unparseable_url_is_shown_without_credentials(self):
+        with self.assertRaises(ToolError) as caught:
+            gitrepo.parse_remote("http://user:s3cret-token@host.example/x")
+        self.assertNotIn("s3cret-token", str(caught.exception))
+        self.assertIn("host.example", str(caught.exception))
+
     def test_rejects_anything_else(self):
         for url in ("/srv/git/r.git", "https://github.com/only-owner", "file:///tmp/x"):
             with self.subTest(url=url), self.assertRaises(ToolError):

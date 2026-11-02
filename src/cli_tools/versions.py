@@ -35,7 +35,7 @@ class VersionFile:
         self.kind = kind
 
     def _text(self):
-        return self.path.read_bytes().decode("utf-8")
+        return _decode(self.path)
 
     def _span(self, text):
         if self.kind == "python":
@@ -62,6 +62,20 @@ class VersionFile:
         text = self._text()
         start, end = self._span(text)
         self.path.write_bytes((text[:start] + new_version + text[end:]).encode("utf-8"))
+
+
+def _decode(path):
+    try:
+        return Path(path).read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise ToolError(f"{Path(path).name} is not UTF-8 text; save it as UTF-8 to release it") from None
+
+
+def _has_dotnet_version(path):
+    try:
+        return bool(_dotnet_span(_decode(path)))
+    except ToolError:  # a file in another encoding cannot be the one we edit
+        return False
 
 
 def _project_table(text):
@@ -99,7 +113,7 @@ def find_version_file(root, override=None):
 
     pyproject = root / "pyproject.toml"
     if pyproject.is_file():
-        text = pyproject.read_bytes().decode("utf-8")
+        text = _decode(pyproject)
         table = _project_table(text)
         if table:
             if _python_span(text):
@@ -108,12 +122,12 @@ def find_version_file(root, override=None):
                             "point to the file that holds it with --version-file")
 
     props = root / "Directory.Build.props"
-    if props.is_file() and _dotnet_span(props.read_bytes().decode("utf-8")):
+    if props.is_file() and _dotnet_span(_decode(props)):
         return VersionFile(props, "dotnet")
 
     csprojs = sorted(p for p in root.rglob("*.csproj")
                      if not SKIPPED_DIRS.intersection(p.relative_to(root).parts[:-1])
-                     and _dotnet_span(p.read_bytes().decode("utf-8")))
+                     and _has_dotnet_version(p))
     if len(csprojs) == 1:
         return VersionFile(csprojs[0], "dotnet")
     if len(csprojs) > 1:

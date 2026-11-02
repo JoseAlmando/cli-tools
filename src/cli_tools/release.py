@@ -3,6 +3,7 @@ import argparse
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.parse
@@ -35,7 +36,10 @@ def load_config(root):
 
 def _interpreter(root):
     venv = Path(root) / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
-    return str(venv) if venv.is_file() else sys.executable
+    if venv.is_file():
+        return str(venv)
+    # The project's Python, not clt's own (an isolated uv/pipx venv without the project's packages)
+    return shutil.which("python") or shutil.which("python3") or sys.executable
 
 
 def _uses_pytest(root):
@@ -173,6 +177,12 @@ def plan_release(root, args):
     current = gitrepo.git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if current != branch:
         raise ToolError(f"Releases are made from {branch}, and this is {current}")
+    for key in ("user.name", "user.email"):
+        try:
+            gitrepo.git(root, "config", "--get", key)
+        except ToolError:
+            raise ToolError(f"git has no {key} to sign the release commit; set it with "
+                            f'git config --global {key} "..."') from None
     host, owner, repo = gitrepo.parse_remote(remote_url(root))
     publisher = publisher_for(host)
     fetch(root, branch)
@@ -185,6 +195,9 @@ def plan_release(root, args):
     previous = gitrepo.last_tag(root)
     messages = gitrepo.messages_since(root, previous)
     if not messages:
+        if previous and not gitrepo.remote_tag_exists(root, previous):
+            raise ToolError(f"There are no commits since {previous}, which is tagged here but not on origin; "
+                            "run clt release --publish to finish it")
         raise ToolError(f"There are no commits since {previous}; nothing to release")
     return {"root": root, "branch": branch, "host": host, "owner": owner, "repo": repo, "config": config,
             "publisher": publisher,
@@ -200,8 +213,10 @@ def fetch(root, branch):
 def publish(root, plan, tag, body):
     """Pushes what origin lacks and creates the release if it is missing; safe to run again after a failure."""
     branch = plan["branch"]
-    if int(gitrepo.git(root, "rev-list", "--count", f"origin/{branch}..HEAD")):
-        gitrepo.git(root, "push", "--quiet", "origin", branch)
+    # Only up to the tagged commit: later local commits are not part of this release
+    tagged = f"{tag}^{{commit}}"
+    if int(gitrepo.git(root, "rev-list", "--count", f"origin/{branch}..{tagged}")):
+        gitrepo.git(root, "push", "--quiet", "origin", f"{tagged}:refs/heads/{branch}")
     if not gitrepo.remote_tag_exists(root, tag):
         gitrepo.git(root, "push", "--quiet", "origin", tag)
     publisher = plan["publisher"]
@@ -212,6 +227,17 @@ def publish(root, plan, tag, body):
         url = publisher.create_release(plan["owner"], plan["repo"], tag, body)
         info(core.err.green("✓ ") + f"Published {tag}: {url}")
     return url
+
+
+def undo(root, originals):
+    """Puts the version file and the changelog back as they were, unstaged."""
+    gitrepo.git(root, "reset", "--quiet", "--", *originals)
+    for name, data in originals.items():
+        path = Path(root) / name
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_bytes(data)
 
 
 def check_tag(root, tag):
@@ -266,11 +292,22 @@ def make_release(args):
                           "changelog": format_section(plan["subjects"]), "host": plan["host"],
                           "repo": f"{plan['owner']}/{plan['repo']}"}, ensure_ascii=False, indent=2))
         return 0
-    plan["version_file"].write(new)
-    prepend_changelog(root / CHANGELOG, new, datetime.date.today().isoformat(), plan["subjects"])
-    gitrepo.git(root, "add", "--", relative(plan), CHANGELOG)
-    gitrepo.git(root, "commit", "--quiet", "-m", f"Release {new}")
-    gitrepo.git(root, "tag", "-a", tag, "-m", f"Release {new}")
+    files = [relative(plan), CHANGELOG]
+    originals = {name: (root / name).read_bytes() if (root / name).is_file() else None for name in files}
+    try:
+        plan["version_file"].write(new)
+        prepend_changelog(root / CHANGELOG, new, datetime.date.today().isoformat(), plan["subjects"])
+        gitrepo.git(root, "add", "--", *files)
+        gitrepo.git(root, "commit", "--quiet", "-m", f"Release {new}")
+    except ToolError as e:
+        undo(root, originals)
+        raise ToolError(f"{e}\nThe version and changelog changes were undone; nothing was committed.") from None
+    try:
+        gitrepo.git(root, "tag", "-a", tag, "-m", f"Release {new}")
+    except ToolError as e:
+        gitrepo.git(root, "reset", "--quiet", "--soft", "HEAD~1")
+        undo(root, originals)
+        raise ToolError(f"{e}\nThe release commit and the file changes were undone.") from None
     info(core.err.green("✓ ") + f"{plan['old']} → {new}: committed and tagged {tag}")
     result = {"version": new, "tag": tag, "version_file": relative(plan), "pushed": False, "release_url": None}
     where = f"{plan['host']}/{plan['owner']}/{plan['repo']}"
@@ -278,7 +315,12 @@ def make_release(args):
     if not (args.yes or args.no_push) and sys.stdin.isatty() and \
             ask(f"Push and publish {tag} to {where}? [y/N] ").lower() in ("y", "yes"):
         body = changelog_section(root / CHANGELOG, new) or f"Release {new}"
-        result.update(pushed=True, release_url=publish(root, plan, tag, body))
+        try:
+            url = publish(root, plan, tag, body)
+        except ToolError as e:
+            e.args = (f"{e}\n{tag} is committed and tagged locally; run clt release --publish to finish.",)
+            raise
+        result.update(pushed=True, release_url=url)
     else:
         info(f"Run {core.err.bold('clt release --publish')} to push and publish {tag}.")
     if core.json_mode():
