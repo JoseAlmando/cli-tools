@@ -1,12 +1,13 @@
 """clt: one command for every tool (clt taiga ..., clt gitea ...)."""
 import sys
 
-from . import __version__, core, gitea, github, taiga
+from . import __version__, core, gitea, github, release, taiga
 
 TOOLS = {
     "taiga": (taiga.main, "client for the Taiga API"),
     "gitea": (gitea.main, "client for the Gitea API, with OAuth2 login in the browser"),
     "github": (github.main, "client for the GitHub API, with a personal access token"),
+    "release": (release.main, "bump the version, update the changelog, tag and publish a release"),
 }
 
 
