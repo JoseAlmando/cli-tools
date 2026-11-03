@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import os
 import unittest
 from pathlib import Path
 
@@ -60,7 +61,7 @@ class PrivateWordsTests(GitRepo):
     def test_without_a_list_it_says_where_to_create_it(self):
         code, output = self.check()
         self.assertEqual(code, 2)
-        self.assertIn("info/private-words", output)
+        self.assertIn(os.path.join("info", "private-words"), output)  # backslashes on Windows
 
 
 if __name__ == "__main__":
