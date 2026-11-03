@@ -2,11 +2,13 @@ import contextlib
 import io
 import json
 import os
+import stat
+import time
 import unittest
 import urllib.parse
 from unittest import mock
 
-from cli_tools.core import credentials, errors, http
+from cli_tools.core import credentials, errors, http, runner
 from cli_tools.core.errors import HttpError, ToolError
 from cli_tools.tools.github import auth
 from cli_tools.tools.github import cli as github
@@ -111,19 +113,39 @@ class BrowserLoginTests(TempConf):
         polls = [(200, '{"error": "authorization_pending"}', {}), (200, '{"error": "slow_down", "interval": 10}', {}),
                  (200, '{"access_token": "oauth-token", "token_type": "bearer", "scope": "repo"}', {})]
         err, sent = self.login(["login", "--browser"], {DEVICE: CODES, TOKEN: polls, USER: (200, '{"login": "bot"}', {})})
-        self.assertEqual(self.saved_token(), {"token": "oauth-token"})
+        # Without expiring tokens (an OAuth app setting) there is nothing to renew
+        self.assertEqual(self.saved_token(), {"token": "oauth-token", "refresh_token": None, "expires_at": None,
+                                              "refresh_expires_at": None, "client_id": "client-123"})
         self.assertIn("ABCD-1234", err)
         self.assertIn("Only enter this code if it appeared in your own terminal just now", err)
         self.assertNotIn("oauth-token", err)
         self.assertEqual(self.opened, ["https://github.com/login/device"])
         self.assertEqual(self.sleeps, [5, 5, 10])
         first = dict(urllib.parse.parse_qsl(sent[0].data.decode()))
-        self.assertEqual(first, {"client_id": "client-123", "scope": "repo"})
+        self.assertEqual(first, {"client_id": "client-123", "scope": "repo project"})
         poll = dict(urllib.parse.parse_qsl(sent[1].data.decode()))
         self.assertEqual(poll, {"client_id": "client-123", "device_code": "dev-code",
                                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
         self.assertTrue(all(r.get_header("Authorization") is None for r in sent[:4]))
         self.assertEqual(sent[4].get_header("Authorization"), "Bearer oauth-token")
+
+    def test_expiring_tokens_are_saved_with_their_refresh_token_and_expiry(self):
+        answer = {"access_token": "ghu_access", "token_type": "bearer", "scope": "project,repo", "expires_in": 28800,
+                  "refresh_token": "ghr_refresh", "refresh_token_expires_in": 15897600}
+        before = int(time.time())
+        err, _ = self.login(["login", "--browser"], {DEVICE: CODES, TOKEN: (200, json.dumps(answer), {}),
+                                                     USER: (200, '{"login": "bot"}', {})})
+        saved = self.saved_token()
+        self.assertEqual(set(saved), {"token", "refresh_token", "expires_at", "refresh_expires_at", "client_id"})
+        self.assertEqual((saved["token"], saved["refresh_token"], saved["client_id"]),
+                         ("ghu_access", "ghr_refresh", "client-123"))
+        self.assertIsInstance(saved["expires_at"], int)
+        self.assertTrue(before + 28800 <= saved["expires_at"] <= int(time.time()) + 28800)
+        self.assertTrue(before + 15897600 <= saved["refresh_expires_at"] <= int(time.time()) + 15897600)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(github.GitHub().credentials_file.stat().st_mode), 0o600)
+        self.assertNotIn("ghu_access", err)
+        self.assertNotIn("ghr_refresh", err)
 
     def test_a_cancelled_or_expired_authorization_saves_nothing(self):
         for error, message in (("access_denied", "cancelled"), ("expired_token", "expired")):
@@ -165,7 +187,7 @@ class BrowserLoginTests(TempConf):
     def test_the_menu_defaults_to_the_browser_and_offers_the_others(self):
         routes = {DEVICE: CODES, TOKEN: (200, '{"access_token": "oauth-token"}', {}), USER: (200, '{"login": "b"}', {})}
         self.login(["login"], routes, stdin="\n")
-        self.assertEqual(self.saved_token(), {"token": "oauth-token"})
+        self.assertEqual(self.saved_token()["token"], "oauth-token")
         with mock.patch.object(github.getpass, "getpass", lambda prompt: "pasted"):
             self.login(["login"], {USER: (200, '{"login": "b"}', {})}, stdin="2\n")
         self.assertEqual(self.saved_token(), {"token": "pasted"})
@@ -209,12 +231,194 @@ class GitHubApiTests(TempConf):
 
     def test_read_only_blocks_session_commands_and_writes(self):
         with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}):
-            for argv in (["login", "--token-stdin"], ["logout"], ["token"], ["POST", "user/repos", "-d", "{}"]):
+            for argv in (["login", "--token-stdin"], ["refresh"], ["logout"], ["token"],
+                         ["POST", "user/repos", "-d", "{}"]):
                 with self.subTest(argv=argv), self.assertRaises(errors.ReadOnlyError):
                     run(argv, {}, stdin="tok\n")
             code, _, _ = run(["GET", "user"], {USER: (200, '{"login": "bot"}', {})})
         self.assertEqual(code, 0)
         self.assertTrue(github.GitHub().credentials_file.exists())
+
+
+def run_cli(argv, routes):
+    """Through runner.run, as the console script runs it: (exit code, stdout, stderr, requests)."""
+    fake = FakeGitHub(routes)
+    out, err = io.StringIO(), io.StringIO()
+    with mock.patch.object(http, "send", fake), mock.patch("sys.stdin", io.StringIO("")), \
+            contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = runner.run(github.main, argv)
+    return code, out.getvalue(), err.getvalue(), fake.requests
+
+
+def form(req):
+    return dict(urllib.parse.parse_qsl(req.data.decode()))
+
+
+RENEWED = (200, json.dumps({"access_token": "ghu_new", "token_type": "bearer", "expires_in": 28800,
+                            "refresh_token": "ghr_new", "refresh_token_expires_in": 15897600}), {})
+REFUSED = (200, json.dumps({"error": "bad_refresh_token",
+                            "error_description": "The refresh token passed is incorrect or expired."}), {})
+ME = (200, '{"login": "bot"}', {})
+BAD_CREDENTIALS = '{"message": "Bad credentials"}'
+SECRETS = ("ghu_old", "ghr_old", "ghu_new", "ghr_new")
+
+
+class SessionRenewalTests(TempConf):
+    """Expiring user tokens from the device flow renew themselves; other tokens are used as they are."""
+
+    def save_session(self, expires_in=28800, refresh_expires_in=15897600, client_id="session-app"):
+        now = int(time.time())
+        credentials.write_private_json(github.GitHub().credentials_file, {
+            "token": "ghu_old", "refresh_token": "ghr_old", "expires_at": now + expires_in,
+            "refresh_expires_at": now + refresh_expires_in, "client_id": client_id})
+
+    def saved(self):
+        return credentials.read_json_file(github.GitHub().credentials_file)
+
+    def assert_no_secrets(self, *texts):
+        for text in texts:
+            for secret in SECRETS:
+                self.assertNotIn(secret, text)
+
+    def test_a_token_about_to_expire_is_renewed_before_the_call(self):
+        self.save_session(expires_in=30)
+        code, out, err, sent = run_cli(["GET", "user"], {TOKEN: RENEWED, USER: ME})
+        self.assertEqual(code, 0)
+        self.assertEqual([r.full_url for r in sent], [TOKEN, USER])
+        self.assertEqual(form(sent[0]), {"client_id": "session-app", "grant_type": "refresh_token",
+                                         "refresh_token": "ghr_old"})
+        self.assertEqual(sent[0].get_header("Accept"), "application/json")
+        self.assertEqual(sent[0].get_header("Content-type"), "application/x-www-form-urlencoded")
+        self.assertIsNone(sent[0].get_header("Authorization"))
+        self.assertEqual(sent[1].get_header("Authorization"), "Bearer ghu_new")
+        saved = self.saved()
+        self.assertEqual((saved["token"], saved["refresh_token"], saved["client_id"]),
+                         ("ghu_new", "ghr_new", "session-app"))
+        self.assertGreater(saved["expires_at"], time.time() + 28000)
+        self.assertGreater(saved["refresh_expires_at"], time.time() + 15000000)
+        self.assert_no_secrets(err)
+
+    def test_a_token_far_from_expiry_is_not_renewed(self):
+        self.save_session()
+        code, _, _, sent = run_cli(["GET", "user"], {USER: ME})
+        self.assertEqual((code, [r.full_url for r in sent]), (0, [USER]))
+        self.assertEqual(sent[0].get_header("Authorization"), "Bearer ghu_old")
+
+    def test_a_401_renews_and_retries_once(self):
+        self.save_session()
+        code, out, err, sent = run_cli(["GET", "user"], {USER: [HttpError(401, BAD_CREDENTIALS), ME], TOKEN: RENEWED})
+        self.assertEqual(code, 0)
+        self.assertEqual([r.full_url for r in sent], [USER, TOKEN, USER])
+        self.assertEqual(sent[2].get_header("Authorization"), "Bearer ghu_new")
+        self.assertEqual(self.saved()["token"], "ghu_new")
+        self.assertIn("renewed", err)
+        self.assert_no_secrets(out, err)
+
+    def test_a_second_401_is_not_retried_again(self):
+        self.save_session()
+        bad = HttpError(401, BAD_CREDENTIALS)
+        code, out, err, sent = run_cli(["GET", "user"], {USER: [bad, bad], TOKEN: [RENEWED]})
+        self.assertEqual(code, 1)
+        self.assertEqual([r.full_url for r in sent], [USER, TOKEN, USER])
+        self.assert_no_secrets(out, err)
+
+    def test_a_refused_renewal_says_to_log_in_again(self):
+        cases = {"expired, 200 with an error": (-10, {TOKEN: REFUSED}),
+                 "expired, HTTP 400": (-10, {TOKEN: HttpError(400, '{"error": "bad_refresh_token"}')}),
+                 "a 401": (28800, {USER: HttpError(401, BAD_CREDENTIALS), TOKEN: REFUSED})}
+        for name, (expires_in, routes) in cases.items():
+            with self.subTest(name):
+                self.save_session(expires_in=expires_in)
+                code, out, err, sent = run_cli(["GET", "user"], routes)
+                self.assertEqual((code, out), (1, ""))
+                self.assertIn("clt github login", err)
+                self.assertEqual([r.full_url for r in sent].count(TOKEN), 1)
+                self.assert_no_secrets(out, err)
+
+    def test_a_refused_renewal_as_json_has_exit_code_1(self):
+        self.save_session(expires_in=-10)
+        code, out, err, _ = run_cli(["--json", "GET", "user"], {TOKEN: REFUSED})
+        error = json.loads(err.strip().splitlines()[-1])
+        self.assertEqual((code, error["exit_code"]), (1, 1))
+        self.assertIn("clt github login", error["error"])
+        self.assert_no_secrets(out, err)
+
+    def test_a_session_renewed_meanwhile_by_another_process_is_used(self):
+        self.save_session(expires_in=-10)
+
+        def renewed_elsewhere(cid, refresh_token, cacert):
+            github.GitHub().save_session(json.loads(RENEWED[1]), cid, refresh_token)
+            return None  # GitHub replaced ghr_old, so it refuses it here
+
+        with mock.patch.object(auth, "refresh_tokens", renewed_elsewhere):
+            code, out, err, sent = run_cli(["GET", "user"], {USER: ME})
+        self.assertEqual((code, [r.full_url for r in sent]), (0, [USER]))
+        self.assertEqual(sent[0].get_header("Authorization"), "Bearer ghu_new")
+
+    def test_an_expired_refresh_token_is_not_sent(self):
+        self.save_session(expires_in=-10, refresh_expires_in=-5)
+        code, out, err, sent = run_cli(["GET", "user"], {})
+        self.assertEqual((code, sent), (1, []))
+        self.assertIn("clt github login", err)
+
+    def test_the_refresh_command_renews_now(self):
+        self.save_session()
+        code, out, err, sent = run_cli(["refresh"], {TOKEN: RENEWED})
+        self.assertEqual((code, out, [r.full_url for r in sent]), (0, "", [TOKEN]))
+        self.assertEqual(self.saved()["token"], "ghu_new")
+        self.assertIn("renewed", err)
+        self.assert_no_secrets(out, err)
+
+    def test_the_refresh_command_reports_a_refusal(self):
+        self.save_session()
+        code, out, err, _ = run_cli(["refresh"], {TOKEN: REFUSED})
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("clt github login", err)
+        self.assertEqual(self.saved()["token"], "ghu_old")
+        self.assert_no_secrets(out, err)
+
+    def test_sessions_without_a_client_id_renew_with_the_built_in_app(self):
+        self.save_session(expires_in=-10, client_id=None)
+        _, _, _, sent = run_cli(["GET", "user"], {TOKEN: RENEWED, USER: ME})
+        self.assertEqual(form(sent[0])["client_id"], auth.DEFAULT_CLIENT_ID)
+
+    def test_tokens_from_the_environment_are_never_renewed(self):
+        self.save_session(expires_in=-10)
+        for var in ("GITHUB_TOKEN", "GH_TOKEN"):
+            with self.subTest(var=var), mock.patch.dict(os.environ, {var: "env-token"}):
+                code, _, _, sent = run_cli(["GET", "user"], {USER: HttpError(401, BAD_CREDENTIALS)})
+                self.assertEqual((code, [r.full_url for r in sent]), (1, [USER]))
+                self.assertEqual(sent[0].get_header("Authorization"), "Bearer env-token")
+                code, out, err, sent = run_cli(["refresh"], {})
+                self.assertEqual((code, sent), (1, []))
+                self.assertIn("cannot be renewed", err)
+                self.assertNotIn("env-token", out + err)
+        self.assertEqual(self.saved()["token"], "ghu_old")
+
+    def test_pasted_tokens_and_old_session_files_work_and_are_never_renewed(self):
+        credentials.write_private_json(github.GitHub().credentials_file, {"token": "pasted-token"})
+        code, _, _, sent = run_cli(["GET", "user"], {USER: ME})
+        self.assertEqual((code, sent[0].get_header("Authorization")), (0, "Bearer pasted-token"))
+        code, _, _, sent = run_cli(["GET", "user"], {USER: HttpError(401, BAD_CREDENTIALS)})
+        self.assertEqual((code, [r.full_url for r in sent]), (1, [USER]))
+        code, out, err, sent = run_cli(["refresh"], {})
+        self.assertEqual((code, sent), (1, []))
+        self.assertIn("cannot be renewed", err)
+        self.assertNotIn("pasted-token", out + err)
+        self.assertEqual(self.saved(), {"token": "pasted-token"})
+
+    def test_the_token_command_prints_a_renewed_token(self):
+        self.save_session(expires_in=-10)
+        code, out, err, _ = run_cli(["token"], {TOKEN: RENEWED})
+        self.assertEqual((code, out), (0, "ghu_new\n"))
+        self.assertNotIn("ghr_new", out + err)
+
+    def test_refresh_is_blocked_by_read_only_mode(self):
+        self.save_session()
+        code, out, err, sent = run_cli(["--read-only", "refresh"], {})
+        self.assertEqual((code, out, sent), (4, "", []))
+        self.assertIn("read-only", err)
+        self.assertEqual(self.saved()["token"], "ghu_old")
 
 
 class ProtectTests(TempConf):
