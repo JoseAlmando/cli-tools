@@ -64,8 +64,9 @@ class ReleaseTests(ReleaseRepo):
         self.assertIn('version = "0.2.0"', (self.root / "pyproject.toml").read_text())
         today = datetime.date.today().isoformat()
         self.assertEqual((self.root / "CHANGELOG.md").read_text(encoding="utf-8"),
-                         f"# Changelog\n\n## 0.2.0 - {today}\n\n- feat: add x\n- Fix y\n")
-        self.assertEqual(self.git("log", "-1", "--format=%s"), "Release 0.2.0")
+                         f"# Changelog\n\n## 0.2.0 - {today}\n\n### Features\n\n- feat: add x\n\n### Other\n\n- Fix y\n")
+        self.assertEqual(self.git("log", "-1", "--format=%s"), "chore(release): 0.2.0")
+        self.assertEqual(self.git("tag", "--list", "--format=%(contents)", "v0.2.0"), "chore(release): 0.2.0")
         self.assertEqual(sorted(self.git("show", "--name-only", "--format=", "HEAD").splitlines()),
                          ["CHANGELOG.md", "pyproject.toml"])
         self.assertEqual(self.git("cat-file", "-t", "v0.2.0"), "tag")
@@ -79,6 +80,15 @@ class ReleaseTests(ReleaseRepo):
         text = (self.root / "CHANGELOG.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# Changelog\n\n## 0.1.1 - "))
         self.assertTrue(text.endswith("- Add a changelog\n\n## 0.1.0 - 2026-01-01\n\n- First\n"))
+
+    def test_without_conventional_prefixes_the_changelog_stays_a_flat_list(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.commit("Fix z")
+        self.commit("Update the docs")
+        self.git("push", "--quiet", "origin", "main")
+        self.release("--bump", "fix", "--yes", "--no-push", "--skip-tests")
+        # The earlier "chore(release): 0.2.0" commit is not part of the new section
+        self.assertEqual(release.changelog_section(self.root / "CHANGELOG.md", "0.2.1"), "- Fix z\n- Update the docs")
 
     def test_yes_takes_the_suggestion(self):
         self.release("--yes", "--no-push", "--skip-tests")
@@ -214,7 +224,7 @@ class ReleaseTests(ReleaseRepo):
         self.assertEqual({k: plan[k] for k in ("version_file", "old", "new", "tag", "host")},
                          {"version_file": "pyproject.toml", "old": "0.1.0", "new": "0.2.0", "tag": "v0.2.0",
                           "host": "github.com"})
-        self.assertEqual(plan["changelog"], "- feat: add x\n- Fix y")
+        self.assertEqual(plan["changelog"], "### Features\n\n- feat: add x\n\n### Other\n\n- Fix y")
         self.assertEqual(self.state(), before)
 
     def test_read_only_blocks_a_real_release(self):
@@ -256,6 +266,32 @@ class ReleaseTests(ReleaseRepo):
         self.assertIn("- Añade soporte 🚀", (self.root / "CHANGELOG.md").read_bytes().decode("utf-8"))
 
 
+class ChangelogTests(unittest.TestCase):
+    def test_sections_group_conventional_commits_by_type(self):
+        cases = [
+            (["feat: a", "fix: b", "Update c"], "### Features\n\n- feat: a\n\n### Fixes\n\n- fix: b\n\n### Other\n\n- Update c"),
+            (["fix(api): b", "docs: d", "feat(cli)!: e", "refactor: f\n\nBREAKING CHANGE: g", "feat: a"],
+             "### Breaking changes\n\n- feat(cli)!: e\n- refactor: f\n\n### Features\n\n- feat: a\n\n"
+             "### Fixes\n\n- fix(api): b\n\n### Other\n\n- docs: d"),
+            (["fix: b", "fix: c"], "### Fixes\n\n- fix: b\n- fix: c"),
+            (["Fix y\n\nBREAKING-CHANGE: z", "chore: x"], "### Breaking changes\n\n- Fix y\n\n### Other\n\n- chore: x"),
+            # No Conventional prefix at all: today's flat list, even with a BREAKING CHANGE footer
+            (["Fix y", "Add x\n\nBREAKING CHANGE: z", "WIP: w"], "- Fix y\n- Add x\n- WIP: w"),
+            ([], ""),
+        ]
+        for messages, expected in cases:
+            with self.subTest(messages=messages):
+                self.assertEqual(release.format_section(messages), expected)
+
+    def test_prepend_changelog_writes_the_grouped_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CHANGELOG.md"
+            body = release.prepend_changelog(path, "1.0.0", "2026-01-01", ["feat!: a", "fix: b"])
+            self.assertEqual(path.read_text(encoding="utf-8"), "# Changelog\n\n## 1.0.0 - 2026-01-01\n\n"
+                             "### Breaking changes\n\n- feat!: a\n\n### Fixes\n\n- fix: b\n")
+            self.assertEqual(release.changelog_section(path, "1.0.0"), body)
+
+
 class FakePublisher:
     def __init__(self, existing=None, fail_create=False):
         self.existing = existing
@@ -288,7 +324,7 @@ class PublishTests(ReleaseRepo):
     def test_yes_at_the_question_pushes_and_publishes(self):
         _, out, _ = self.release("--skip-tests", stdin="2\ny\n", tty=True, env={"CLT_JSON": "1"})
         self.assertTrue(self.remote_has("v0.2.0"))
-        self.assertEqual(self.publisher.created, [("o", "r", "v0.2.0", "- feat: add x\n- Fix y")])
+        self.assertEqual(self.publisher.created, [("o", "r", "v0.2.0", "### Features\n\n- feat: add x\n\n### Other\n\n- Fix y")])
         result = json.loads(out)
         self.assertEqual((result["pushed"], result["release_url"]),
                          (True, "https://github.com/o/r/releases/tag/v0.2.0"))
@@ -317,7 +353,7 @@ class PublishTests(ReleaseRepo):
         self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
         self.release("--publish")
         self.assertTrue(self.remote_has("v0.2.0"))
-        self.assertEqual(self.publisher.created[0][2:], ("v0.2.0", "- feat: add x\n- Fix y"))
+        self.assertEqual(self.publisher.created[0][2:], ("v0.2.0", "### Features\n\n- feat: add x\n\n### Other\n\n- Fix y"))
 
     def test_publish_when_the_release_exists_creates_nothing(self):
         self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")

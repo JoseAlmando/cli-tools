@@ -19,6 +19,7 @@ from cli_tools.tools.github.client import GitHub
 CONFIG_FILE = ".clt.json"
 CHANGELOG = "CHANGELOG.md"
 CHOICES = {"1": "fix", "2": "feat", "3": "major"}
+CHANGELOG_GROUPS = (("breaking", "Breaking changes"), ("feat", "Features"), ("fix", "Fixes"), ("other", "Other"))
 
 
 # --- Settings and tests -------------------------------------------------------------
@@ -87,14 +88,24 @@ def run_tests(root, argv, env):
 
 # --- Changelog ----------------------------------------------------------------------
 
-def format_section(subjects):
-    return "\n".join(f"- {s}" for s in subjects)
+def format_section(messages):
+    """One bullet per commit subject; grouped under ### headings when any commit has a Conventional prefix."""
+    subjects = [m.splitlines()[0] for m in messages]
+    if not any(versions.is_conventional(m) for m in messages):
+        return "\n".join(f"- {s}" for s in subjects)
+    kinds = [versions.change_kind(m) for m in messages]
+    groups = []
+    for kind, title in CHANGELOG_GROUPS:
+        bullets = [f"- {s}" for s, k in zip(subjects, kinds) if k == kind]
+        if bullets:
+            groups.append(f"### {title}\n\n" + "\n".join(bullets))
+    return "\n\n".join(groups)
 
 
-def prepend_changelog(path, version, date, subjects):
-    """Adds "## version - date" with one bullet per subject on top of the changelog; returns the bullets."""
+def prepend_changelog(path, version, date, messages):
+    """Adds "## version - date" with the commits' section on top of the changelog; returns the section."""
     path = Path(path)
-    body = format_section(subjects)
+    body = format_section(messages)
     block = f"## {version} - {date}\n\n{body}\n"
     text = path.read_bytes().decode("utf-8") if path.is_file() else "# Changelog\n"
     first = text.find("\n## ")
@@ -206,7 +217,8 @@ def plan_release(root, args):
     return {"root": root, "branch": branch, "host": host, "owner": owner, "repo": repo, "config": config,
             "publisher": publisher,
             "version_file": version_file, "old": old, "previous": previous,
-            "subjects": [m.splitlines()[0] for m in messages], "suggested": versions.suggest_bump(messages)}
+            "messages": messages, "subjects": [m.splitlines()[0] for m in messages],
+            "suggested": versions.suggest_bump(messages)}
 
 
 def fetch(root, branch):
@@ -273,6 +285,11 @@ def ask_bump(plan):
         info(output.err.yellow("Answer 1, 2 or 3."))
 
 
+def release_message(version):
+    """The release commit's and the annotated tag's message, a Conventional Commit."""
+    return f"chore(release): {version}"
+
+
 def relative(plan):
     return plan["version_file"].path.relative_to(plan["root"]).as_posix()
 
@@ -293,21 +310,21 @@ def make_release(args):
     check_tag(root, tag)
     if args.dry_run:
         print(json.dumps({"version_file": relative(plan), "old": plan["old"], "new": new, "tag": tag,
-                          "changelog": format_section(plan["subjects"]), "host": plan["host"],
+                          "changelog": format_section(plan["messages"]), "host": plan["host"],
                           "repo": f"{plan['owner']}/{plan['repo']}"}, ensure_ascii=False, indent=2))
         return 0
     files = [relative(plan), CHANGELOG]
     originals = {name: (root / name).read_bytes() if (root / name).is_file() else None for name in files}
     try:
         plan["version_file"].write(new)
-        prepend_changelog(root / CHANGELOG, new, datetime.date.today().isoformat(), plan["subjects"])
+        prepend_changelog(root / CHANGELOG, new, datetime.date.today().isoformat(), plan["messages"])
         gitrepo.git(root, "add", "--", *files)
-        gitrepo.git(root, "commit", "--quiet", "-m", f"Release {new}")
+        gitrepo.git(root, "commit", "--quiet", "-m", release_message(new))
     except ToolError as e:
         undo(root, originals)
         raise ToolError(f"{e}\nThe version and changelog changes were undone; nothing was committed.") from None
     try:
-        gitrepo.git(root, "tag", "-a", tag, "-m", f"Release {new}")
+        gitrepo.git(root, "tag", "-a", tag, "-m", release_message(new))
     except ToolError as e:
         gitrepo.git(root, "reset", "--quiet", "--soft", "HEAD~1")
         undo(root, originals)

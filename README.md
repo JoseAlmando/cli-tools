@@ -78,13 +78,13 @@ clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin
 
 ```bash
 clt release            # checks, runs the tests, asks fix / feat / new version (Enter takes the suggestion),
-                       # updates the version and CHANGELOG.md, commits "Release X.Y.Z", tags vX.Y.Z,
+                       # updates the version and CHANGELOG.md, commits "chore(release): X.Y.Z", tags vX.Y.Z,
                        # and asks before pushing and publishing the release
 clt release --dry-run  # shows what it would do
 clt release --publish  # finishes a release that was tagged but not pushed or published (safe to repeat)
 ```
 
-It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for `BREAKING CHANGE` or `type!:`, and `fix` otherwise.
+It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for `BREAKING CHANGE` or `type!:`, and `fix` otherwise. When commits use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) prefixes, the changelog section (also the release's text on GitHub or Gitea) groups them under *Breaking changes*, *Features*, *Fixes* and *Other*; without any, it is a plain list.
 
 | Option | Use |
 |---|---|
@@ -153,6 +153,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
 uvx ruff check .                                            # the linter, a development tool only
 ```
 
+**Contributing:** commit messages and branch names follow Conventional Commits and Conventional Branch; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 | Path | Contents |
 |---|---|
 | `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
@@ -163,8 +165,9 @@ uvx ruff check .                                            # the linter, a deve
 | `docs/architecture.md` | How the code is organized and how to add a tool. |
 | `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for AI agents that develop `clt`: rules, checks and how work flows. |
+| `scripts/check_conventions.py` | Checks commit messages and branch names, and installs the `commit-msg` hook ([CONTRIBUTING.md](CONTRIBUTING.md)). |
 | `scripts/check_private_words.py` | Checks that no private word (listed in `.git/info/private-words`, never pushed) is in the repo. |
-| `.github/workflows/tests.yml` | CI: Ruff, the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
+| `.github/workflows/tests.yml` | CI: Ruff, the commit and branch conventions on pull requests, the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
 | `.clt.json` | How `clt release` runs this repo's tests. Releases are cut with `clt release`. |
 
 ## License
