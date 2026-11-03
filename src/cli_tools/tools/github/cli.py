@@ -49,8 +49,10 @@ def cmd_login(gh, args):
     if method != "stdin" and not (method == "browser" and args.no_browser):
         context.require_terminal("clt github login")
     method = method or choose_login()
+    tokens = None
     if method == "browser":
-        token = auth.device_login(gh.cacert, open_browser=not args.no_browser)
+        tokens = auth.device_login(gh.cacert, open_browser=not args.no_browser)
+        token = tokens["access_token"]
     elif method == "stdin":
         token = sys.stdin.readline().strip()
     else:
@@ -66,8 +68,18 @@ def cmd_login(gh, args):
     except HttpError as e:
         raise ToolError(f"GitHub rejected the token: {error_detail(e.body)}") from None
     me = http.parse_json(raw, "Checking the token")
-    credentials.write_private_json(gh.credentials_file, {"token": token})
+    if tokens:  # the device flow's token, which may expire and renew itself
+        gh.save_session(tokens, auth.client_id())
+    else:  # a personal access token is saved as it is
+        credentials.write_private_json(gh.credentials_file, {"token": token})
     info(output.err.green("✓ ") + f"Logged in to GitHub as {output.err.bold(me.get('login', '?'))}")
+
+
+def cmd_refresh(gh, args):
+    if not gh.refresh(gh.load_credentials()):
+        raise ToolError("This token cannot be renewed: only a session from authorizing in the browser renews; "
+                        "for a new token, run " + output.err.bold("clt github login"))
+    info(output.err.green("✓ ") + "Token renewed.")
 
 
 def cmd_logout(gh, args):
@@ -76,7 +88,7 @@ def cmd_logout(gh, args):
 
 
 def cmd_token(gh, args):
-    print(gh.load_credentials()["token"])
+    print(gh.fresh_credentials()["token"])
 
 
 def cmd_me(gh, args):
@@ -126,7 +138,8 @@ examples:
 token permissions (fine-grained personal access token):
   Contents: read and write         releases
   Administration: read and write   protect
-authorizing in the browser asks for the "repo" scope (OAuth apps cannot ask for less)
+authorizing in the browser asks for the "repo" scope (releases and rulesets; OAuth apps cannot ask
+for less) and the "project" scope (Projects boards); its token renews itself before it expires
 
 environment variables:
   GITHUB_TOKEN, GH_TOKEN   use this token instead of the saved session
@@ -138,7 +151,7 @@ environment variables:
 for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
-                    login, logout and token are blocked too
+                    login, refresh, logout and token are blocked too
   exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
 """
     parser = argparse.ArgumentParser(prog=prog, description="Client for the GitHub API.", epilog=epilog,
@@ -154,9 +167,10 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
+    sub.add_parser("refresh", help="renew the token of a browser login now").set_defaults(func=cmd_refresh)
     sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the access token").set_defaults(func=cmd_token)
+    sub.add_parser("token", help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
     p = sub.add_parser("protect", help="rulesets so only the repo admin can update main and create, move or delete v* tags")
     p.add_argument("repo", metavar="OWNER/REPO")
     p.add_argument("--dry-run", action="store_true", help="print the requests that would be sent and send nothing")

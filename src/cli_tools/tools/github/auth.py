@@ -1,4 +1,5 @@
-"""Getting a GitHub token in the browser: OAuth device flow, or a pre-filled page to create one."""
+"""Getting a GitHub token in the browser: OAuth device flow, or a pre-filled page to create one; and renewing
+the device flow's expiring tokens."""
 import os
 import time
 import urllib.parse
@@ -11,7 +12,9 @@ from cli_tools.core.output import info
 
 # Public client ID of the "clt" OAuth app (device flow enabled); GITHUB_CLIENT_ID sets another
 DEFAULT_CLIENT_ID = "Ov23liksTJsgDjqbhwaS"
-SCOPE = "repo"  # releases and rulesets on the user's repos; OAuth apps cannot ask for anything narrower
+# repo: releases and rulesets on the user's repos (OAuth apps cannot ask for anything narrower);
+# project: managing GitHub Projects boards
+SCOPE = "repo project"
 DEVICE_CODE_URL = "https://github.com/login/device/code"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
@@ -47,7 +50,8 @@ def show(url, open_browser):
 
 
 def device_login(cacert, open_browser=True):
-    """The token of the user who enters the code shown here at github.com/login/device."""
+    """The token response for the user who enters the code shown here at github.com/login/device: access_token and,
+    when the OAuth app issues expiring tokens, expires_in, refresh_token and refresh_token_expires_in."""
     cid = client_id()
     if not cid:
         raise ToolError("Authorizing in the browser needs a GitHub OAuth app: set GITHUB_CLIENT_ID, "
@@ -73,7 +77,7 @@ def device_login(cacert, open_browser=True):
         answer = _form_post(TOKEN_URL, {"client_id": cid, "device_code": codes["device_code"],
                                         "grant_type": DEVICE_GRANT}, cacert)
         if answer.get("access_token"):
-            return answer["access_token"]
+            return answer
         error = answer.get("error")
         if error == "authorization_pending":
             continue
@@ -86,3 +90,18 @@ def device_login(cacert, open_browser=True):
             break
         raise ToolError("GitHub refused the authorization: " + answer.get("error_description", error or "?"))
     raise ToolError("The code expired before it was entered; run clt github login again")
+
+
+def refresh_tokens(cid, refresh_token, cacert):
+    """A new token response for a device flow session, or None if GitHub refuses the refresh token.
+
+    Device flow tokens belong to a public client, so no client secret is sent."""
+    try:
+        answer = _form_post(TOKEN_URL, {"client_id": cid, "grant_type": "refresh_token",
+                                        "refresh_token": refresh_token}, cacert)
+    except HttpError as e:
+        if e.status in (400, 401, 403):
+            return None
+        raise
+    # GitHub answers a refused refresh token with 200 and an error field
+    return answer if answer.get("access_token") else None

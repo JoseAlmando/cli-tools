@@ -165,7 +165,7 @@ class HelpAndVersionTests(TempConf):
     def test_the_api_clients_list_their_commands(self):
         for script, argv, commands in (("taiga", [], "login refresh logout me token api"),
                                        ("gitea", [], "login refresh logout me token api"),
-                                       ("clt", ["github"], "login logout me token protect api")):
+                                       ("clt", ["github"], "login refresh logout me token protect api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():
