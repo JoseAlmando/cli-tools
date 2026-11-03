@@ -42,6 +42,23 @@ class CltTests(TempConf):
 
 
 class VersionTests(unittest.TestCase):
+    def test_the_source_tree_wins_over_what_was_installed(self):
+        def installed():  # an editable install keeps the version it was installed with
+            return "0.1.0"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ours = Path(tmp) / "pyproject.toml"
+            ours.write_text('[project]\nname = "cli-tools"\nversion = "9.8.7"\n')
+            self.assertEqual(cli_tools._find_version(ours, installed), "9.8.7")
+            ours.write_text('[project]\nname = "other-project"\nversion = "5.5.5"\n')
+            self.assertEqual(cli_tools._find_version(ours, installed), "0.1.0")
+            self.assertEqual(cli_tools._find_version(Path(tmp) / "missing.toml", installed), "0.1.0")
+
+            def not_installed():
+                raise cli_tools.metadata.PackageNotFoundError("cli-tools")
+
+            self.assertEqual(cli_tools._find_version(Path(tmp) / "missing.toml", not_installed), "0+unknown")
+
     def test_version_matches_pyproject(self):
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         self.assertEqual(__version__, re.search(r'^version = "([^"]+)"', pyproject.read_text(), re.M).group(1))
