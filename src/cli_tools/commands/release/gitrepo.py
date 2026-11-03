@@ -63,5 +63,33 @@ def subjects_since(root, tag):
     return [m.splitlines()[0] for m in messages_since(root, tag)]
 
 
+def remote_refs(root, branch):
+    """origin's commit for branch (or None) and its v* tags, read in one connection."""
+    head, tags = None, set()
+    for line in git(root, "ls-remote", "origin", f"refs/heads/{branch}", "refs/tags/v*").splitlines():
+        sha, _, ref = line.partition("\t")
+        if ref == f"refs/heads/{branch}":
+            head = sha
+        elif ref.startswith("refs/tags/") and not ref.endswith("^{}"):
+            tags.add(ref[len("refs/tags/"):])
+    return head, tags
+
+
+def is_ancestor(root, commit, of="HEAD"):
+    """True if commit is in of's history; False also when commit is not known here."""
+    return _run(root, "merge-base", "--is-ancestor", commit, of).returncode == 0
+
+
+def push(root, *refspecs):
+    """Pushes every refspec in one connection, all or nothing. git and ssh write to the terminal, so a passphrase
+    prompt or a rejection is seen as it happens."""
+    try:
+        done = subprocess.run(["git", "push", "--quiet", "--atomic", "origin", *refspecs], cwd=root)
+    except FileNotFoundError:
+        raise ToolError("git is not installed or not on the PATH") from None
+    if done.returncode != 0:
+        raise ToolError("git push failed (see git's message above); nothing was pushed")
+
+
 def remote_tag_exists(root, tag):
     return bool(git(root, "ls-remote", "--tags", "origin", f"refs/tags/{tag}"))

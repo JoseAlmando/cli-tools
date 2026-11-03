@@ -185,7 +185,7 @@ def find_root():
 
 
 def plan_release(root, args):
-    """Every check that can stop a release, and what it would do; changes nothing (besides git fetch)."""
+    """Every check that can stop a release, and what it would do; changes nothing."""
     if gitrepo.git(root, "status", "--porcelain"):
         raise ToolError("The working tree has uncommitted or untracked changes; commit or stash them first")
     branch = gitrepo.default_branch(root)
@@ -200,41 +200,42 @@ def plan_release(root, args):
                             f'git config --global {key} "..."') from None
     host, owner, repo = gitrepo.parse_remote(remote_url(root))
     publisher = publisher_for(host)
-    fetch(root, branch)
-    behind = int(gitrepo.git(root, "rev-list", "--count", f"HEAD..origin/{branch}"))
-    if behind:
-        raise ToolError(f"{branch} is {behind} commit(s) behind origin/{branch}; pull first")
+    # One look at origin for the whole release: its branch and its tags (each contact may ask for a passphrase)
+    remote_head, remote_tags = gitrepo.remote_refs(root, branch)
+    if remote_head and not gitrepo.is_ancestor(root, remote_head):
+        raise ToolError(f"{branch} is behind origin/{branch}; pull first")
     config = load_config(root)
     version_file = versions.find_version_file(root, args.version_file or config.get("version_file"))
     old = version_file.read()
     previous = gitrepo.last_tag(root)
     messages = gitrepo.messages_since(root, previous)
     if not messages:
-        if previous and not gitrepo.remote_tag_exists(root, previous):
+        if previous and previous not in remote_tags:
             raise ToolError(f"There are no commits since {previous}, which is tagged here but not on origin; "
                             "run clt release --publish to finish it")
         raise ToolError(f"There are no commits since {previous}; nothing to release")
     return {"root": root, "branch": branch, "host": host, "owner": owner, "repo": repo, "config": config,
-            "publisher": publisher,
+            "publisher": publisher, "remote_head": remote_head, "remote_tags": remote_tags,
             "version_file": version_file, "old": old, "previous": previous,
             "messages": messages, "subjects": [m.splitlines()[0] for m in messages],
             "suggested": versions.suggest_bump(messages)}
 
 
-def fetch(root, branch):
-    # Only the branch: fetching tags would bring a remote vX.Y.Z here and hide where it came from
-    gitrepo.git(root, "fetch", "--quiet", "--no-tags", "origin", branch)
-
-
 def publish(root, plan, tag, body):
-    """Pushes what origin lacks and creates the release if it is missing; safe to run again after a failure."""
+    """Pushes what origin lacks, in one atomic push, and creates the release if it is missing; safe to run again."""
     branch = plan["branch"]
+    tagged = gitrepo.git(root, "rev-parse", f"{tag}^{{commit}}")
+    refspecs, names = [], []
     # Only up to the tagged commit: later local commits are not part of this release
-    tagged = f"{tag}^{{commit}}"
-    if int(gitrepo.git(root, "rev-list", "--count", f"origin/{branch}..{tagged}")):
-        gitrepo.git(root, "push", "--quiet", "origin", f"{tagged}:refs/heads/{branch}")
-    if not gitrepo.remote_tag_exists(root, tag):
-        gitrepo.git(root, "push", "--quiet", "origin", tag)
+    if not (plan["remote_head"] and gitrepo.is_ancestor(root, tagged, plan["remote_head"])):
+        refspecs.append(f"{tagged}:refs/heads/{branch}")
+        names.append(branch)
+    if tag not in plan["remote_tags"]:
+        refspecs.append(f"refs/tags/{tag}")
+        names.append(tag)
+    if refspecs:
+        info(f"Pushing {' and '.join(names)} to origin…")
+        gitrepo.push(root, *refspecs)
     publisher = plan["publisher"]
     url = publisher.release_url(plan["owner"], plan["repo"], tag)
     if url:
@@ -256,10 +257,10 @@ def undo(root, originals):
             path.write_bytes(data)
 
 
-def check_tag(root, tag):
+def check_tag(root, tag, remote_tags):
     if gitrepo.git(root, "tag", "--list", tag):
         raise ToolError(f"The tag {tag} already exists here")
-    if gitrepo.remote_tag_exists(root, tag):
+    if tag in remote_tags:
         raise ToolError(f"The tag {tag} already exists on origin; was this version released from another machine?")
 
 
@@ -307,7 +308,7 @@ def make_release(args):
     kind = args.bump or (plan["suggested"] if args.yes or args.dry_run else ask_bump(plan))
     new = versions.bump(plan["old"], kind)
     tag = f"v{new}"
-    check_tag(root, tag)
+    check_tag(root, tag, plan["remote_tags"])
     if args.dry_run:
         print(json.dumps({"version_file": relative(plan), "old": plan["old"], "new": new, "tag": tag,
                           "changelog": format_section(plan["messages"]), "host": plan["host"],
@@ -360,8 +361,9 @@ def resume_publish(args):
     tag = tags[0]
     branch = gitrepo.default_branch(root)
     host, owner, repo = gitrepo.parse_remote(remote_url(root))
-    plan = {"branch": branch, "owner": owner, "repo": repo, "publisher": publisher_for(host)}
-    fetch(root, branch)
+    remote_head, remote_tags = gitrepo.remote_refs(root, branch)
+    plan = {"branch": branch, "owner": owner, "repo": repo, "publisher": publisher_for(host),
+            "remote_head": remote_head, "remote_tags": remote_tags}
     version = tag[1:]
     url = publish(root, plan, tag, changelog_section(root / CHANGELOG, version) or f"Release {version}")
     if args.ctx.json_mode:
