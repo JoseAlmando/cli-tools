@@ -55,7 +55,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Install with uv
         run: |
-          uv tool install --python "$(command -v python)" .
+          # A version, not a path: Git Bash on Windows gives python without its .exe, which uv cannot find
+          uv tool install --python "${{ matrix.python }}" .
           bin="$(uv tool dir --bin)"
           if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -u "$bin")"; fi
           "$bin/clt" --version
