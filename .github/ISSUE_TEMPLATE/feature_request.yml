@@ -1,0 +1,34 @@
+name: Suggestion
+description: An idea for clt — a new command, a new tool, or a better way to do something
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Describing the moment you needed it helps more than describing a solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or the moment where clt fell short.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it working, e.g. the command you would like to type.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: ["Taiga", "Gitea", "GitHub", "Releases", "Updates", "A new tool or service", "For scripts and AI agents", "Other"]
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: Optional. Other tools or workarounds you use.

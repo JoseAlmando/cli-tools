@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/JoseAlmando/cli-tools/security/advisories/new
+    about: Token leaks, credential handling, requests going to the wrong host. Please do not open a public issue.
