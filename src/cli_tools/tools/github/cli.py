@@ -1,4 +1,4 @@
-"""Command-line client for the GitHub API, with a personal access token."""
+"""Command-line client for the GitHub API: log in from the browser or with a token, then call the API."""
 import argparse
 import getpass
 import json
@@ -8,6 +8,7 @@ import sys
 from cli_tools.core import api, context, credentials, http, output
 from cli_tools.core.errors import HttpError, ToolError, error_detail
 from cli_tools.core.output import info
+from cli_tools.tools.github import auth
 from cli_tools.tools.github.client import GitHub, next_page
 
 # Only the repository admin role (the owner, on a personal repo) may update main or create, move or delete v* tags
@@ -24,11 +25,39 @@ RULESETS = [
 
 # --- Commands -----------------------------------------------------------------
 
+def choose_login():
+    ready = bool(auth.client_id())
+    info("How do you want to log in to GitHub?")
+    info("  [1] Authorize in the browser" + (" (recommended)" if ready else
+                                             " (not set up here: no OAuth app; see clt github login --help)"))
+    info("  [2] Create a token in the browser and paste it here")
+    info("  [3] Paste a token you already have")
+    default = "1" if ready else "2"
+    while True:
+        sys.stderr.write(f"Choice [{default}]: ")
+        sys.stderr.flush()
+        answer = sys.stdin.readline().strip() or default
+        if answer in ("1", "2", "3"):
+            return {"1": "browser", "2": "create", "3": "paste"}[answer]
+        info(output.err.yellow("Answer 1, 2 or 3."))
+
+
 def cmd_login(gh, args):
-    if args.token_stdin:
+    method = ("stdin" if args.token_stdin else "browser" if args.browser else "create" if args.create_token
+              else None)
+    # Only a link printed for someone else to open (--browser --no-browser) can go without a terminal
+    if method != "stdin" and not (method == "browser" and args.no_browser):
+        context.require_terminal("clt github login")
+    method = method or choose_login()
+    if method == "browser":
+        token = auth.device_login(gh.cacert, open_browser=not args.no_browser)
+    elif method == "stdin":
         token = sys.stdin.readline().strip()
     else:
-        context.require_terminal("clt github login")
+        if method == "create":
+            info(output.err.cyan("Create the token on this page (its name and permissions are filled in), "
+                                 "then paste it here:"))
+            auth.show(auth.token_page_url(), not args.no_browser)
         token = getpass.getpass(output.err.cyan("GitHub token: ")).strip()
     if not token:
         raise ToolError("No token given")
@@ -86,7 +115,9 @@ def cmd_protect(gh, args):
 def build_parser(prog):
     epilog = f"""\
 examples:
-  {prog} login                                   # paste a personal access token
+  {prog} login                                   # asks: authorize in the browser, create a token, or paste one
+  {prog} login --browser                         # enter a code at github.com/login/device
+  {prog} login --create-token                    # opens the token page with clt's permissions filled in
   {prog} me
   {prog} GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title --all
   {prog} GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url --max-items 5
@@ -95,9 +126,11 @@ examples:
 token permissions (fine-grained personal access token):
   Contents: read and write         releases
   Administration: read and write   protect
+authorizing in the browser asks for the "repo" scope (OAuth apps cannot ask for less)
 
 environment variables:
   GITHUB_TOKEN, GH_TOKEN   use this token instead of the saved session
+  GITHUB_CLIENT_ID         OAuth app (with device flow enabled) for login --browser
   GITHUB_CONF_DIR          credentials folder (default ~/.config/github)
   GITHUB_CACERT            extra CA (default ca.pem in the credentials folder)
   NO_COLOR                 turns colors off
@@ -112,8 +145,13 @@ for scripts and AI agents (any position on the command line):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="save a personal access token after checking it")
-    p.add_argument("--token-stdin", action="store_true", help="read the token from stdin")
+    p = sub.add_parser("login", help="log in from the browser or with a token, and save the session")
+    how = p.add_mutually_exclusive_group()
+    how.add_argument("--browser", action="store_true", help="authorize in the browser with a one-time code")
+    how.add_argument("--create-token", action="store_true",
+                     help="open GitHub's token page with clt's permissions filled in, then paste the token")
+    how.add_argument("--token-stdin", action="store_true", help="read an existing token from stdin")
+    p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
     sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)

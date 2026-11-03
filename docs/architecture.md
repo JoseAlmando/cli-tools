@@ -21,7 +21,7 @@ src/cli_tools/
 ├── tools/               the API clients, one package each
 │   ├── taiga/           client.py (server, session, token renewal) and cli.py (commands, main, run)
 │   ├── gitea/           client.py, cli.py, and auth.py (OAuth2 + PKCE login in the browser)
-│   └── github/          client.py and cli.py (only as clt github)
+│   └── github/          client.py, cli.py, and auth.py (device flow and the pre-filled token page; only as clt github)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
     └── update.py        clt update

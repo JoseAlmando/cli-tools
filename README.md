@@ -7,7 +7,7 @@ Command-line tools for the Taiga, Gitea and GitHub APIs, gathered under a single
 | `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`. |
 | `taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
 | `gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
-| `clt github` | GitHub API client: login with a personal access token and calls to `https://api.github.com/`. Only as `clt github` (a standalone `github` command would clash with GitHub Desktop's). |
+| `clt github` | GitHub API client: login in the browser or with a token, and calls to `https://api.github.com/`. Only as `clt github` (a standalone `github` command would clash with GitHub Desktop's). |
 
 ## Installation
 
@@ -57,12 +57,18 @@ gitea POST repos/<owner>/<repo>/pulls -d @pr.json
 
 export TAIGA_TOKEN="$(taiga token)"             # for other scripts
 
-clt github login                                # paste a fine-grained personal access token
+clt github login                                # asks: authorize in the browser, create a token, or paste one
 clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
 clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin updates main and v* tags
 ```
 
-The GitHub token needs *Contents: read and write* to publish releases, and *Administration: read and write* for `clt github protect`.
+`clt github login` offers three ways in:
+
+1. **Authorize in the browser** (`--browser`): it shows a code, opens `github.com/login/device`, and saves the token once you approve. It asks for the `repo` scope, the narrowest an OAuth app can ask for that covers releases and rulesets.
+2. **Create a token in the browser** (`--create-token`): it opens GitHub's page for a fine-grained token with the name `clt`, a 90-day expiry and the permissions already filled in (*Contents: read and write* to publish releases, *Administration: read and write* for `clt github protect`); you generate it and paste it.
+3. **Paste a token you already have** (`--token-stdin` for scripts).
+
+`--no-browser` only prints the link. Authorizing in the browser needs a GitHub OAuth app with device flow enabled; `clt` ships the ID of its own, and `GITHUB_CLIENT_ID` sets another.
 
 `clt --help`, `taiga --help` and `gitea --help` list the commands and the environment variables.
 
@@ -129,6 +135,7 @@ No server is configured by default. Each tool takes it, in this order:
 | `GITEA_AUTH_SOURCE` | Gitea external login source to go straight to; empty means Gitea's own login page. |
 | `GITHUB_TOKEN`, `GH_TOKEN` | GitHub token to use instead of the saved session. |
 | `GITHUB_CONF_DIR` | GitHub credentials folder; by default `~/.config/github`. |
+| `GITHUB_CLIENT_ID` | GitHub OAuth app (with device flow enabled) for `clt github login --browser`. |
 | `GITEA_CLIENT_ID` | Public Gitea OAuth2 app; by default, the one Gitea has built in for `tea`. |
 | `GITEA_CALLBACK_PORT` | Local port for the browser's answer; `38291` by default. |
 | `NO_COLOR` | Turns colors off. |
@@ -137,6 +144,7 @@ No server is configured by default. Each tool takes it, in this order:
 
 - **Credentials:** they are stored in `credentials.json`, with `0600` permissions, inside a `0700` folder, and written atomically. They never go into the repo.
 - **Token:** it is only sent to paths relative to the configured server's API, and redirects are not followed (urllib would forward the `Authorization` header).
+- **GitHub browser login:** only enter the code that `clt github login` shows in your own terminal. Someone who gets you to type *their* code at `github.com/login/device` receives a token for your account. The OAuth app's client ID in the code is public by design; it has no secret, and you can revoke `clt` under *Settings → Applications* on GitHub.
 
 ## Development
 
