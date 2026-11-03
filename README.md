@@ -64,7 +64,7 @@ clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin
 
 `clt github login` offers three ways in:
 
-1. **Authorize in the browser** (`--browser`): it shows a code, opens `github.com/login/device`, and saves the token once you approve. It asks for the `repo` scope, the narrowest an OAuth app can ask for that covers releases and rulesets.
+1. **Authorize in the browser** (`--browser`): it shows a code, opens `github.com/login/device`, and saves the token once you approve. It asks for the `repo` scope, the narrowest an OAuth app can ask for that covers releases and rulesets, and the `project` scope, to manage GitHub Projects boards. GitHub gives this login a token that expires after about 8 hours and a refresh token; `clt` renews the token by itself a little before it expires (or after a 401), and `clt github refresh` renews it now. When GitHub no longer accepts the refresh token (after about 6 months, or if you revoke `clt`), run `clt github login` again.
 2. **Create a token in the browser** (`--create-token`): it opens GitHub's page for a fine-grained token with the name `clt`, a 90-day expiry and the permissions already filled in (*Contents: read and write* to publish releases, *Administration: read and write* for `clt github protect`); you generate it and paste it.
 3. **Paste a token you already have** (`--token-stdin` for scripts).
 
@@ -133,7 +133,7 @@ No server is configured by default. Each tool takes it, in this order:
 | `TAIGA_CONF_DIR`, `GITEA_CONF_DIR` | Credentials folder; by default `~/.config/taiga` and `~/.config/gitea`. |
 | `TAIGA_CACERT`, `GITEA_CACERT` | Optional extra CA, for example an internal one; by default `ca.pem` in the credentials folder. |
 | `GITEA_AUTH_SOURCE` | Gitea external login source to go straight to; empty means Gitea's own login page. |
-| `GITHUB_TOKEN`, `GH_TOKEN` | GitHub token to use instead of the saved session. |
+| `GITHUB_TOKEN`, `GH_TOKEN` | GitHub token to use instead of the saved session; it is used as it is and never renewed. |
 | `GITHUB_CONF_DIR` | GitHub credentials folder; by default `~/.config/github`. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth app (with device flow enabled) for `clt github login --browser`. |
 | `GITEA_CLIENT_ID` | Public Gitea OAuth2 app; by default, the one Gitea has built in for `tea`. |
