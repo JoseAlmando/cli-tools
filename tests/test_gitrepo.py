@@ -37,6 +37,7 @@ class GitHelpersTests(GitRepo):
         self.commit("feat: add x")
         self.commit("Release 0.1.1")
         self.commit("Fix y\n\nBREAKING CHANGE: z")
+        self.commit("chore(release): 0.1.2")
         self.assertEqual(gitrepo.last_tag(self.root), "v0.1.0")
         self.assertEqual(gitrepo.subjects_since(self.root, "v0.1.0"), ["feat: add x", "Fix y"])
         self.assertEqual(gitrepo.messages_since(self.root, "v0.1.0"), ["feat: add x", "Fix y\n\nBREAKING CHANGE: z"])

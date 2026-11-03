@@ -18,6 +18,29 @@ jobs:
       - name: Ruff
         run: uvx ruff check .
 
+  # Conventional Branch for the PR's branch, Conventional Commits for each of its commits (see CONTRIBUTING.md)
+  conventions:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # The PR's own head, not the merge commit GitHub makes with the base branch
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      # Through the environment, never pasted into the script: a branch name can hold shell syntax
+      - name: Branch name
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: python scripts/check_conventions.py branch "$HEAD_REF"
+      - name: Commit messages
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_conventions.py range "origin/$BASE_REF..HEAD"
+
   test:
     strategy:
       fail-fast: false
