@@ -20,6 +20,10 @@ DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 
 
+def on_windows():
+    return os.name == "nt"
+
+
 def installed_version():
     return __version__
 
@@ -102,7 +106,7 @@ def main(argv, ctx=None, prog="clt update"):
         raise ToolError("uv is not installed; install the version with one of:\n  " + " ".join(command) +
                         f"\n  pipx install --force git+https://github.com/{REPO}@v{target}")
     info(f"Installing clt {target} (now {installed})…")
-    if os.name == "nt":
+    if on_windows():
         # A running clt.exe cannot be replaced: let uv finish after this process exits
         subprocess.Popen(command, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
         info(f"The update continues in the background; run {output.err.bold('clt --version')} in a few seconds.")

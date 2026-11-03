@@ -234,8 +234,11 @@ class ReleaseTests(ReleaseRepo):
     def test_outside_a_repo_it_says_so(self):
         with tempfile.TemporaryDirectory() as elsewhere:
             os.chdir(elsewhere)
-            with self.assertRaisesRegex(ToolError, "Not inside a git repository"):
-                self.release("--dry-run", "--bump", "fix")
+            try:
+                with self.assertRaisesRegex(ToolError, "Not inside a git repository"):
+                    self.release("--dry-run", "--bump", "fix")
+            finally:
+                os.chdir(self.root)  # Windows cannot delete the folder a process is in
 
     def test_an_unknown_host_stops(self):
         self.git("config", "remote.origin.url", "https://gitlab.example.com/o/r.git")

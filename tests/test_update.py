@@ -28,6 +28,8 @@ class UpdateTests(TempConf):
         mock.patch.object(update, "installed_version", lambda: "0.2.0").start()
         mock.patch.object(update, "install_info", lambda: INSTALLED).start()
         mock.patch.object(update.shutil, "which", lambda name: "/usr/bin/uv").start()
+        # The same outcome on every runner: Linux and macOS unless a test says otherwise
+        mock.patch.object(update, "on_windows", lambda: False).start()
         self.run_ = mock.patch.object(update.subprocess, "run", return_value=mock.Mock(returncode=0)).start()
         self.popen = mock.patch.object(update.subprocess, "Popen").start()
 
@@ -80,7 +82,7 @@ class UpdateTests(TempConf):
         self.assertIn("pipx install --force git+https://github.com/JoseAlmando/cli-tools@v0.10.0", str(caught.exception))
 
     def test_on_windows_it_continues_in_the_background(self):
-        with mock.patch.object(update.os, "name", "nt"):
+        with mock.patch.object(update, "on_windows", lambda: True):
             code, _, err = self.update()
         self.assertEqual(code, 0)
         flags = self.popen.call_args[1]["creationflags"]
