@@ -5,8 +5,9 @@ import os
 import unittest
 from unittest import mock
 
-from cli_tools import core, update
-from cli_tools.core import ToolError
+from cli_tools.commands import update
+from cli_tools.core import errors, http
+from cli_tools.core.errors import ToolError
 from tests.helpers import TempConf
 
 RELEASES = json.dumps([{"tag_name": "v0.2.0"}, {"tag_name": "v0.10.0"}, {"tag_name": "v0.1.0"}, {"tag_name": "nightly"}])
@@ -23,7 +24,7 @@ class UpdateTests(TempConf):
             return 200, RELEASES, {}
 
         self.addCleanup(mock.patch.stopall)
-        mock.patch.object(core, "send", send).start()
+        mock.patch.object(http, "send", send).start()
         mock.patch.object(update, "installed_version", lambda: "0.2.0").start()
         mock.patch.object(update, "install_info", lambda: INSTALLED).start()
         mock.patch.object(update.shutil, "which", lambda name: "/usr/bin/uv").start()
@@ -92,7 +93,7 @@ class UpdateTests(TempConf):
         self.assertEqual(self.update()[0], 7)
 
     def test_read_only_blocks_an_update(self):
-        with self.assertRaises(core.ReadOnlyError):
+        with self.assertRaises(errors.ReadOnlyError):
             self.update(env={"CLT_READONLY": "1"})
         self.run_.assert_not_called()
 

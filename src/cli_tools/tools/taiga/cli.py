@@ -1,0 +1,119 @@
+"""Command-line client for the Taiga API."""
+import argparse
+import getpass
+import json
+import os
+import sys
+
+from cli_tools.core import api, context, http, output, runner
+from cli_tools.core.errors import HttpError, ToolError, error_detail
+from cli_tools.core.output import info
+from cli_tools.tools.taiga.client import PROG, Taiga
+
+
+def cmd_login(t, args):
+    if args.password_stdin:
+        if not args.user:
+            raise ToolError("--password-stdin needs --user")
+        user, password = args.user, sys.stdin.readline().rstrip("\r\n")
+    else:
+        context.require_terminal(f"{PROG} login")
+        user = args.user or input(output.err.cyan("Username or email: "))
+        password = getpass.getpass(output.err.cyan("Password: "))
+    body = json.dumps({"type": "normal", "username": user, "password": password})
+    try:
+        _, raw, _ = t.request("POST", "auth", body)
+    except HttpError as e:
+        raise ToolError(f"Login failed: {error_detail(e.body)}") from None
+    data = http.parse_json(raw, "Logging in")
+    t.save_credentials(data)
+    info(output.err.green("✓ ") + f"Logged in to {t.url} as {output.err.bold(data.get('username', user))}")
+
+
+def cmd_refresh(t, args):
+    if not t.refresh(t.load_credentials()):
+        raise ToolError("The server rejected the renewal; run " + output.err.bold(f"{PROG} login"))
+    info(output.err.green("✓ ") + "Token renewed.")
+
+
+def cmd_logout(t, args):
+    t.credentials_file.unlink(missing_ok=True)
+    info(output.err.green("✓ ") + "Logged out.")
+
+
+def cmd_token(t, args):
+    print(t.load_credentials()["auth_token"])
+
+
+def cmd_me(t, args):
+    _, raw, _ = t.call("GET", "users/me", None)
+    me = http.parse_json(raw, "Getting the user")
+    if not isinstance(me, dict):
+        raise ToolError("Unexpected response from users/me")
+    if args.ctx.json_mode:
+        from_env = bool(os.environ.get("TAIGA_TOKEN"))
+        print(json.dumps({"id": me.get("id"), "username": me.get("username"), "full_name": me.get("full_name_display"),
+                          "email": me.get("email"), "url": t.url,
+                          "credentials_file": None if from_env else str(t.credentials_file)}, ensure_ascii=False))
+        return
+    print(f"{output.out.bold(me.get('full_name_display', ''))} ({output.out.cyan(me.get('username', '?'))}) on {t.url}")
+    print(output.out.dim(f"Credentials: {t.credentials_file}"))
+
+
+def build_parser(prog=PROG):
+    epilog = f"""\
+examples:
+  {prog} login --url https://taiga.example.com      # the first time; after that, {prog} login is enough
+  {prog} me
+  {prog} GET "userstories?project=<id>"
+  {prog} GET "userstories?project=<id>&page=2" -i   # see the x-pagination-* headers
+  {prog} PATCH userstories/123 -d '{{"version": 4, "subject": "New title"}}'
+  {prog} POST tasks -d @task.json
+  export TAIGA_TOKEN="$({prog} token)"               # for other scripts
+
+environment variables:
+  TAIGA_URL         server, https only; if unset, the last session's
+  TAIGA_TOKEN       use this token instead of the saved session (not renewed)
+  TAIGA_CONF_DIR    credentials folder (default ~/.config/taiga)
+  TAIGA_CACERT      extra CA (default ca.pem in the credentials folder)
+  NO_COLOR          turns colors off
+
+for scripts and AI agents (any position on the command line):
+  --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
+  --read-only       send only GET requests (also CLT_READONLY=1);
+                    login, refresh, logout and token are blocked too
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
+"""
+    parser = argparse.ArgumentParser(prog=prog, description="Client for the Taiga API.", epilog=epilog,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    p = sub.add_parser("login", help="log in and save the credentials")
+    p.add_argument("-u", "--user", help="username or email (asked for if missing)")
+    p.add_argument("--url", help="Taiga server, e.g. https://taiga.example.com")
+    p.add_argument("--password-stdin", action="store_true", help="read the password from stdin (needs --user)")
+    p.set_defaults(func=cmd_login)
+
+    sub.add_parser("refresh", help="renew the token without asking for the password").set_defaults(func=cmd_refresh)
+    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
+    sub.add_parser("token", help="print the access token").set_defaults(func=cmd_token)
+    api.add_api_parser(sub, prog, "userstories?project=<id>", lambda t, args: api.run_api(args, t.call, args.ctx))
+    return parser
+
+
+def main(argv, ctx=None, prog=PROG):
+    ctx = ctx or context.CLIContext.from_env()
+    parser = build_parser(prog)
+    args = parser.parse_args(api.with_api_shortcut(argv))
+    if not args.command:
+        parser.print_help()
+        return 2
+    ctx.check_session_command(args.command)
+    args.ctx = ctx
+    # logout only deletes the file, so it does not need to know the server
+    return args.func(Taiga(getattr(args, "url", None), require_url=args.command != "logout"), args)
+
+
+def run():
+    return runner.run(main)

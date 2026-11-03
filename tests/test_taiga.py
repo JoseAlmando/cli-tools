@@ -1,8 +1,9 @@
 import json
 import unittest
 
-from cli_tools import core, taiga
-from cli_tools.core import HttpError, ToolError
+from cli_tools.core import credentials
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.taiga import cli as taiga
 from tests.helpers import TempConf
 
 
@@ -14,7 +15,7 @@ class TaigaTests(TempConf):
 
     def test_login_saves_the_server_with_the_session(self):
         t = self.client()
-        self.assertEqual(core.read_json_file(t.credentials_file)["url"], "https://taiga.example.com")
+        self.assertEqual(credentials.read_json_file(t.credentials_file)["url"], "https://taiga.example.com")
         self.assertEqual(taiga.Taiga().url, "https://taiga.example.com")
 
     def test_a_401_refreshes_the_token_and_retries_once(self):

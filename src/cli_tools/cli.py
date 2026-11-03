@@ -1,20 +1,15 @@
 """clt: one command for every tool (clt taiga ..., clt gitea ...)."""
+import importlib
 import sys
 
-from . import __version__, core, gitea, github, release, taiga, update
-
-TOOLS = {
-    "taiga": (taiga.main, "client for the Taiga API"),
-    "gitea": (gitea.main, "client for the Gitea API, with OAuth2 login in the browser"),
-    "github": (github.main, "client for the GitHub API, with a personal access token"),
-    "release": (release.main, "bump the version, update the changelog, tag and publish a release"),
-    "update": (update.main, "install the latest release of clt, or a given version"),
-}
+from cli_tools import __version__, registry
+from cli_tools.core import context, runner
+from cli_tools.core.errors import ToolError
 
 
 def usage():
     lines = ["usage: clt TOOL [arguments]", "", "tools:"]
-    lines += [f"  {name:<8} {description}" for name, (_, description) in TOOLS.items()]
+    lines += [f"  {name:<8} {description}" for name, _, description in registry.TOOLS]
     lines += ["", "Each tool has its own help: clt taiga --help, clt github --help.",
               "They are also installed on their own: taiga ..., gitea ...",
               "",
@@ -26,19 +21,21 @@ def usage():
     return "\n".join(lines)
 
 
-def main(argv):
+def main(argv, ctx=None):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(usage())
         return 0 if argv else 2
     if argv[0] in ("-V", "--version"):
         print(f"clt {__version__}")
         return 0
-    tool = TOOLS.get(argv[0])
-    if tool is None:
+    module = registry.find(argv[0])
+    if module is None:
         print(usage(), file=sys.stderr)
-        raise core.ToolError(f"Unknown tool {argv[0]!r}")
-    return tool[0](argv[1:], prog=f"clt {argv[0]}")
+        raise ToolError(f"Unknown tool {argv[0]!r}")
+    # Only the tool that runs is imported
+    ctx = ctx or context.CLIContext.from_env()
+    return importlib.import_module(module).main(argv[1:], ctx=ctx, prog=f"clt {argv[0]}")
 
 
 def run():
-    return core.run(main)
+    return runner.run(main)

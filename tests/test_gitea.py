@@ -1,18 +1,22 @@
 import base64
 import hashlib
 import json
+import os
 import time
 import unittest
 import urllib.parse
+from unittest import mock
 
-from cli_tools import core, gitea
-from cli_tools.core import HttpError
+from cli_tools.core import credentials
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.gitea import auth, client
+from cli_tools.tools.gitea import cli as gitea
 from tests.helpers import TempConf
 
 
 class PkceTests(unittest.TestCase):
     def test_the_challenge_is_the_s256_of_the_verifier(self):
-        verifier, challenge = gitea.pkce_pair()
+        verifier, challenge = auth.pkce_pair()
         expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         self.assertEqual(challenge, expected)
         self.assertGreaterEqual(len(verifier), 43)
@@ -26,7 +30,7 @@ class GiteaTests(TempConf):
 
     def test_login_goes_straight_to_the_provider_and_back_to_authorize(self):
         g = gitea.Gitea("https://gitea.example.com")
-        url = gitea.login_url(g, "my-oidc", "http://127.0.0.1:38291", "st", "ch")
+        url = auth.login_url(g, "my-oidc", "http://127.0.0.1:38291", "st", "ch")
         parts = urllib.parse.urlsplit(url)
         self.assertEqual(parts.path, "/user/oauth2/my-oidc")
         redirect_to = urllib.parse.parse_qs(parts.query)["redirect_to"][0]
@@ -35,11 +39,11 @@ class GiteaTests(TempConf):
         params = urllib.parse.parse_qs(authorize.query)
         self.assertEqual(params["code_challenge_method"], ["S256"])
         self.assertEqual(params["redirect_uri"], ["http://127.0.0.1:38291"])
-        self.assertEqual(params["client_id"], [gitea.DEFAULT_CLIENT_ID])
+        self.assertEqual(params["client_id"], [client.DEFAULT_CLIENT_ID])
 
     def test_without_a_provider_login_uses_the_gitea_login_page(self):
         g = gitea.Gitea("https://gitea.example.com")
-        self.assertTrue(gitea.login_url(g, "", "http://127.0.0.1:1", "st", "ch")
+        self.assertTrue(auth.login_url(g, "", "http://127.0.0.1:1", "st", "ch")
                         .startswith("https://gitea.example.com/login/oauth/authorize?"))
 
     def test_an_expired_token_is_refreshed_before_the_call(self):
@@ -89,10 +93,15 @@ class GiteaTests(TempConf):
         g.token_request = rejected
         self.assertFalse(g.refresh(g.load_credentials()))
 
+    def test_a_callback_port_that_is_not_a_number_is_a_clear_error(self):
+        with mock.patch.dict(os.environ, {"GITEA_CALLBACK_PORT": "abc"}):
+            with self.assertRaisesRegex(ToolError, "GITEA_CALLBACK_PORT"):
+                gitea.Gitea("https://gitea.example.com")
+
     def test_logout_works_without_a_configured_server(self):
         self.client()
         self.assertEqual(gitea.main(["logout"]), None)
-        self.assertIsNone(core.read_json_file(gitea.Gitea("https://gitea.example.com").credentials_file))
+        self.assertIsNone(credentials.read_json_file(gitea.Gitea("https://gitea.example.com").credentials_file))
 
 
 if __name__ == "__main__":

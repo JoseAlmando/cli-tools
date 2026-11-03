@@ -2,7 +2,7 @@
 import re
 import subprocess
 
-from .core import ToolError
+from cli_tools.core.errors import ToolError
 
 RELEASE_COMMIT = re.compile(r"Release \d+\.\d+\.\d+$")
 

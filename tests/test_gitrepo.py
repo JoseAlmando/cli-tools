@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from cli_tools import gitrepo
-from cli_tools.core import ToolError
+from cli_tools.commands.release import gitrepo
+from cli_tools.core.errors import ToolError
 from tests.helpers import GitRepo
 
 

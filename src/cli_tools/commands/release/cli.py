@@ -9,8 +9,12 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from . import core, gitea, github, gitrepo, versions
-from .core import HttpError, ToolError, info
+from cli_tools.commands.release import gitrepo, versions
+from cli_tools.core import context, http, output
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.core.output import info
+from cli_tools.tools.gitea.client import Gitea
+from cli_tools.tools.github.client import GitHub
 
 CONFIG_FILE = ".clt.json"
 CHANGELOG = "CHANGELOG.md"
@@ -68,7 +72,7 @@ def test_command(root, config, kind):
 
 
 def run_tests(root, argv, env):
-    info(core.err.cyan("Running the tests: ") + " ".join(argv))
+    info(output.err.cyan("Running the tests: ") + " ".join(argv))
     try:
         proc = subprocess.Popen(argv, cwd=root, env={**os.environ, **env}, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
@@ -131,12 +135,12 @@ class Publisher:
             if e.status == 404:
                 return None
             raise
-        return core.parse_json(raw, "Reading the release").get("html_url")
+        return http.parse_json(raw, "Reading the release").get("html_url")
 
     def create_release(self, owner, repo, tag, body):
         _, raw, _ = self.client.call("POST", f"repos/{owner}/{repo}/releases",
                                      json.dumps({"tag_name": tag, "name": tag, "body": body}))
-        return core.parse_json(raw, "Creating the release").get("html_url")
+        return http.parse_json(raw, "Creating the release").get("html_url")
 
 def remote_url(root):
     """origin's URL as configured (not rewritten by url.*.insteadOf)."""
@@ -146,11 +150,11 @@ def remote_url(root):
 def publisher_for(host):
     """The Publisher for the host the release goes to; fails early when there is no session for it."""
     if host == "github.com":
-        client = github.GitHub()
+        client = GitHub()
         client.load_credentials()
         return Publisher(client)
     try:
-        g = gitea.Gitea()
+        g = Gitea()
     except ToolError:
         g = None
     if g and urllib.parse.urlsplit(g.url).hostname == host:
@@ -225,7 +229,7 @@ def publish(root, plan, tag, body):
         info(f"The release {tag} already exists: {url}")
     else:
         url = publisher.create_release(plan["owner"], plan["repo"], tag, body)
-        info(core.err.green("✓ ") + f"Published {tag}: {url}")
+        info(output.err.green("✓ ") + f"Published {tag}: {url}")
     return url
 
 
@@ -254,7 +258,7 @@ def ask(prompt):
 
 
 def ask_bump(plan):
-    core.require_terminal("clt release (without --bump or --yes)")
+    context.require_terminal("clt release (without --bump or --yes)")
     default = next(n for n, kind in CHOICES.items() if kind == plan["suggested"])
     labels = {"fix": "fix", "feat": "feat", "major": "new version"}
     info(f"Project: {plan['version_file'].kind} ({plan['version_file'].path.name}) · current version {plan['old']} · "
@@ -266,7 +270,7 @@ def ask_bump(plan):
         answer = ask(f"Choice [{default}]: ") or default
         if answer in CHOICES:
             return CHOICES[answer]
-        info(core.err.yellow("Answer 1, 2 or 3."))
+        info(output.err.yellow("Answer 1, 2 or 3."))
 
 
 def relative(plan):
@@ -275,12 +279,12 @@ def relative(plan):
 
 def make_release(args):
     if not args.dry_run:
-        core.require_writes("release")
+        args.ctx.require_writes("release")
     root = find_root()
     plan = plan_release(root, args)
     if not args.dry_run:
         if args.skip_tests:
-            info(core.err.yellow("Tests skipped (--skip-tests)."))
+            info(output.err.yellow("Tests skipped (--skip-tests)."))
         else:
             run_tests(root, *test_command(root, plan["config"], plan["version_file"].kind))
     kind = args.bump or (plan["suggested"] if args.yes or args.dry_run else ask_bump(plan))
@@ -308,7 +312,7 @@ def make_release(args):
         gitrepo.git(root, "reset", "--quiet", "--soft", "HEAD~1")
         undo(root, originals)
         raise ToolError(f"{e}\nThe release commit and the file changes were undone.") from None
-    info(core.err.green("✓ ") + f"{plan['old']} → {new}: committed and tagged {tag}")
+    info(output.err.green("✓ ") + f"{plan['old']} → {new}: committed and tagged {tag}")
     result = {"version": new, "tag": tag, "version_file": relative(plan), "pushed": False, "release_url": None}
     where = f"{plan['host']}/{plan['owner']}/{plan['repo']}"
     # Pushing needs an explicit yes: never with --yes or --no-push, nor without a person to answer
@@ -322,15 +326,15 @@ def make_release(args):
             raise
         result.update(pushed=True, release_url=url)
     else:
-        info(f"Run {core.err.bold('clt release --publish')} to push and publish {tag}.")
-    if core.json_mode():
+        info(f"Run {output.err.bold('clt release --publish')} to push and publish {tag}.")
+    if args.ctx.json_mode:
         print(json.dumps(result, ensure_ascii=False))
     return 0
 
 
 def resume_publish(args):
     """--publish: push and publish the newest release tagged here, skipping whatever is already done."""
-    core.require_writes("release --publish")
+    args.ctx.require_writes("release --publish")
     root = find_root()
     at_head = gitrepo.git(root, "tag", "--points-at", "HEAD", "--list", "v[0-9]*").splitlines()
     tags = at_head or gitrepo.git(root, "tag", "--list", "v[0-9]*", "--sort=-v:refname").splitlines()
@@ -343,7 +347,7 @@ def resume_publish(args):
     fetch(root, branch)
     version = tag[1:]
     url = publish(root, plan, tag, changelog_section(root / CHANGELOG, version) or f"Release {version}")
-    if core.json_mode():
+    if args.ctx.json_mode:
         version_file = versions.find_version_file(root, args.version_file or load_config(root).get("version_file"))
         print(json.dumps({"version": version, "tag": tag, "version_file": version_file.path.relative_to(root).as_posix(),
                           "pushed": True, "release_url": url}, ensure_ascii=False))
@@ -374,6 +378,7 @@ with <Version>); other files with --version-file. Settings per repo in {CONFIG_F
     return parser
 
 
-def main(argv, prog="clt release"):
+def main(argv, ctx=None, prog="clt release"):
     args = build_parser(prog).parse_args(argv)
+    args.ctx = ctx or context.CLIContext.from_env()
     return resume_publish(args) if args.publish else make_release(args)

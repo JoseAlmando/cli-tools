@@ -10,8 +10,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cli_tools import core, gitea, github, gitrepo, release
-from cli_tools.core import HttpError, ToolError
+from cli_tools import cli as clt
+from cli_tools.commands.release import cli as release
+from cli_tools.commands.release import gitrepo
+from cli_tools.core import errors, runner
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.gitea import client as gitea
+from cli_tools.tools.github import client as github
 from tests.helpers import GitRepo, TempConf, run_git
 
 PYPROJECT = '[project]\nname = "demo"\nversion = "0.1.0"\n'
@@ -188,6 +193,20 @@ class ReleaseTests(ReleaseRepo):
         self.release("--bump", "fix", "--yes", "--no-push")
         self.assertTrue(marker.exists())
 
+    def test_the_project_tests_do_not_see_clt_global_flags(self):
+        seen = Path(self.tmp.name) / "env.json"
+        script = f"import json, os; json.dump(sorted(k for k in os.environ if k.startswith('CLT_')), open({str(seen)!r}, 'w'))"
+        (self.root / ".clt.json").write_text(json.dumps({"release": {"test_command": [sys.executable, "-c", script]}}))
+        self.git("add", "-A")
+        self.git("commit", "--quiet", "-m", "Configure releases")
+        self.git("push", "--quiet", "origin", "main")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = runner.run(clt.main, ["--json", "release", "--bump", "fix", "--yes", "--no-push"])
+        self.assertEqual((code, json.loads(out.getvalue())["tag"]), (0, "v0.1.1"))
+        self.assertEqual(json.loads(seen.read_text()), [])
+        self.assertEqual({k for k in os.environ if k.startswith("CLT_")}, set())
+
     def test_dry_run_prints_the_plan_and_changes_nothing_even_read_only(self):
         before = self.state()
         _, out, _ = self.release("--dry-run", "--bump", "feat", env={"CLT_READONLY": "1"})
@@ -199,7 +218,7 @@ class ReleaseTests(ReleaseRepo):
         self.assertEqual(self.state(), before)
 
     def test_read_only_blocks_a_real_release(self):
-        with self.assertRaises(core.ReadOnlyError):
+        with self.assertRaises(errors.ReadOnlyError):
             self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests", env={"CLT_READONLY": "1"})
 
     def test_json_prints_one_result_object(self):
@@ -324,7 +343,7 @@ class PublishTests(ReleaseRepo):
 
     def test_publish_is_blocked_in_read_only_mode(self):
         self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
-        with self.assertRaises(core.ReadOnlyError):
+        with self.assertRaises(errors.ReadOnlyError):
             self.release("--publish", env={"CLT_READONLY": "1"})
         self.assertFalse(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
 

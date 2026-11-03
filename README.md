@@ -142,16 +142,19 @@ No server is configured by default. Each tool takes it, in this order:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
+uvx ruff check .                                            # the linter, a development tool only
 ```
 
 | Path | Contents |
 |---|---|
-| `src/cli_tools/core.py` | The shared parts: HTTP, credentials, output and the `api` subcommand. |
-| `src/cli_tools/taiga.py`, `gitea.py`, `github.py` | One tool per file: its login, its token renewal and its commands. |
-| `src/cli_tools/clt.py` | The `clt` command. A new tool is added to `TOOLS`. |
-| `tests/` | Tests with `unittest`, with no network or servers. |
+| `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
+| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea or GitHub: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `run()`. |
+| `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
+| `src/cli_tools/commands/` | `clt release` (with its version files and git helpers) and `clt update`. |
+| `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
+| `docs/architecture.md` | How the code is organized and how to add a tool. |
 | `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
-| `.github/workflows/tests.yml` | CI: the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
+| `.github/workflows/tests.yml` | CI: Ruff, the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
 | `.clt.json` | How `clt release` runs this repo's tests. Releases are cut with `clt release`. |
 
 ## License

@@ -14,9 +14,23 @@ authors = [{ name = "José A. Dominique" }]
 dependencies = []
 
 [project.scripts]
-clt = "cli_tools.clt:run"
-taiga = "cli_tools.taiga:run"
-gitea = "cli_tools.gitea:run"
+clt = "cli_tools.cli:run"
+taiga = "cli_tools.tools.taiga.cli:run"
+gitea = "cli_tools.tools.gitea.cli:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+dev = ["ruff"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.pycodestyle]
+# Code wraps at about 120 columns; a few long strings and test data lines reach 140
+max-line-length = 140

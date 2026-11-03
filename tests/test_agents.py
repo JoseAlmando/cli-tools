@@ -7,8 +7,11 @@ import os
 import unittest
 from unittest import mock
 
-from cli_tools import core, gitea, taiga
-from cli_tools.core import HttpError, ToolError
+from cli_tools.core import api, context, errors, http, runner
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.gitea import auth as gitea_auth
+from cli_tools.tools.gitea import cli as gitea
+from cli_tools.tools.taiga import cli as taiga
 from tests.helpers import TempConf
 
 
@@ -22,7 +25,7 @@ def api_args(method="GET", path="items", **overrides):
 def run_api(args, call):
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = core.run_api(args, call)
+        code = api.run_api(args, call)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -32,40 +35,52 @@ def no_call(method, path, body):
 
 class GlobalFlagsTests(TempConf):
     def test_are_taken_from_any_position(self):
-        rest = core.take_global_flags(["GET", "--json", "items", "--read-only", "-r"])
+        ctx, rest = context.parse_global_flags(["GET", "--json", "items", "--read-only", "-r"])
         self.assertEqual(rest, ["GET", "items", "-r"])
-        self.assertTrue(core.json_mode())
-        self.assertTrue(core.read_only())
+        self.assertTrue(ctx.json_mode)
+        self.assertTrue(ctx.read_only)
 
     def test_can_also_come_from_the_environment(self):
         with mock.patch.dict(os.environ, {"CLT_JSON": "1", "CLT_READONLY": "true"}):
-            self.assertTrue(core.json_mode())
-            self.assertTrue(core.read_only())
-        self.assertFalse(core.json_mode())
-        self.assertFalse(core.read_only())
+            self.assertTrue(context.CLIContext.from_env().json_mode)
+            self.assertTrue(context.parse_global_flags([])[0].read_only)
+        self.assertFalse(context.CLIContext.from_env().json_mode)
+        self.assertFalse(context.parse_global_flags([])[0].read_only)
+
+
+    def test_the_environment_is_read_but_never_written(self):
+        ctx, rest = context.parse_global_flags(["me", "--json"], environ={"CLT_READONLY": "yes"})
+        self.assertEqual((ctx, rest), (context.CLIContext(json_mode=True, read_only=True), ["me"]))
+        self.assertEqual({k for k in os.environ if k.startswith("CLT_")}, set())
+
+    def test_the_context_passed_to_a_tool_is_the_one_used(self):
+        with self.assertRaises(errors.ReadOnlyError), contextlib.redirect_stderr(io.StringIO()):
+            taiga.main(["logout"], ctx=context.CLIContext(read_only=True))
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), contextlib.redirect_stderr(io.StringIO()):
+            self.assertIsNone(taiga.main(["logout"], ctx=context.CLIContext()))
 
 
 class ExitCodeTests(TempConf):
     def run_main(self, error, *flags):
-        def main(argv):
+        def main(argv, ctx):
             raise error
 
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            code = core.run(main, list(flags))
+            code = runner.run(main, list(flags))
         return code, err.getvalue()
 
     def test_each_kind_of_error_has_its_own_code(self):
-        self.assertEqual(self.run_main(ToolError("boom"))[0], core.EXIT_ERROR)
-        self.assertEqual(self.run_main(core.NotLoggedIn("no session"))[0], core.EXIT_NOT_LOGGED_IN)
-        self.assertEqual(self.run_main(core.ReadOnlyError("blocked"))[0], core.EXIT_READ_ONLY)
+        self.assertEqual(self.run_main(ToolError("boom"))[0], errors.EXIT_ERROR)
+        self.assertEqual(self.run_main(errors.NotLoggedIn("no session"))[0], errors.EXIT_NOT_LOGGED_IN)
+        self.assertEqual(self.run_main(errors.ReadOnlyError("blocked"))[0], errors.EXIT_READ_ONLY)
 
     def test_with_json_the_error_is_one_json_line(self):
-        code, err = self.run_main(core.NotLoggedIn("Not logged in"), "--json")
-        self.assertEqual(code, core.EXIT_NOT_LOGGED_IN)
+        code, err = self.run_main(errors.NotLoggedIn("Not logged in"), "--json")
+        self.assertEqual(code, errors.EXIT_NOT_LOGGED_IN)
         line = json.loads(err.strip())
         self.assertEqual(line["type"], "NotLoggedIn")
-        self.assertEqual(line["exit_code"], core.EXIT_NOT_LOGGED_IN)
+        self.assertEqual(line["exit_code"], errors.EXIT_NOT_LOGGED_IN)
         self.assertEqual(line["error"], "Not logged in")
 
     def test_with_json_an_http_error_keeps_its_status_and_body(self):
@@ -74,7 +89,7 @@ class ExitCodeTests(TempConf):
 
         with mock.patch.dict(os.environ, {"CLT_JSON": "1"}):
             code, out, err = run_api(api_args(), call)
-        self.assertEqual(code, core.EXIT_ERROR)
+        self.assertEqual(code, errors.EXIT_ERROR)
         self.assertEqual(out, "")
         line = json.loads(err.strip())
         self.assertEqual((line["status"], line["error"], line["body"]), (404, "Not found", {"message": "Not found"}))
@@ -84,7 +99,7 @@ class ReadOnlyAndDryRunTests(TempConf):
     def test_read_only_blocks_every_method_but_get(self):
         with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}):
             for method in ("POST", "PUT", "PATCH", "DELETE"):
-                with self.subTest(method=method), self.assertRaises(core.ReadOnlyError):
+                with self.subTest(method=method), self.assertRaises(errors.ReadOnlyError):
                     run_api(api_args(method, data='{"a": 1}'), no_call)
             code, out, _ = run_api(api_args("GET"), lambda m, p, b: (200, '{"ok": true}', {}))
         self.assertEqual((code, json.loads(out)), (0, {"ok": True}))
@@ -99,9 +114,9 @@ class ReadOnlyAndDryRunTests(TempConf):
                 with self.subTest(tool=tool.PROG, command=command[0]), mock.patch.dict(os.environ, env), \
                         mock.patch("sys.stdin", io.StringIO("s3cret\n")), contextlib.redirect_stdout(out), \
                         contextlib.redirect_stderr(io.StringIO()), \
-                        mock.patch.object(core, "send", side_effect=AssertionError("no request should be sent")), \
-                        mock.patch.object(gitea, "wait_for_callback", side_effect=AssertionError("no browser login")):
-                    with self.assertRaisesRegex(core.ReadOnlyError, "read-only"):
+                        mock.patch.object(http, "send", side_effect=AssertionError("no request should be sent")), \
+                        mock.patch.object(gitea_auth, "wait_for_callback", side_effect=AssertionError("no browser login")):
+                    with self.assertRaisesRegex(errors.ReadOnlyError, "read-only"):
                         tool.main(command)
                     # Nothing reaches stdout, so no token can leak
                     self.assertEqual(out.getvalue(), "")
@@ -109,7 +124,7 @@ class ReadOnlyAndDryRunTests(TempConf):
     def test_read_only_logout_keeps_the_saved_session(self):
         t = taiga.Taiga("https://taiga.example.com")
         t.save_credentials({"auth_token": "t", "refresh": "r", "username": "bot"})
-        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(core.ReadOnlyError):
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(errors.ReadOnlyError):
             taiga.main(["logout"])
         self.assertTrue(t.credentials_file.exists())
 
@@ -121,9 +136,9 @@ class ReadOnlyAndDryRunTests(TempConf):
         self.assertIn("bot", out.getvalue())
 
     def test_require_writes_blocks_only_in_read_only_mode(self):
-        self.assertIsNone(core.require_writes("protect"))
-        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaisesRegex(core.ReadOnlyError, "protect"):
-            core.require_writes("protect")
+        self.assertIsNone(context.CLIContext.from_env().require_writes("protect"))
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaisesRegex(errors.ReadOnlyError, "protect"):
+            context.CLIContext.from_env().require_writes("protect")
 
     def test_dry_run_prints_the_request_and_sends_nothing(self):
         code, out, _ = run_api(api_args("PATCH", "issues/1", data='{"status": 2}', dry_run=True), no_call)
@@ -212,7 +227,7 @@ class NonInteractiveTests(TempConf):
 
     def test_without_a_session_the_error_says_how_to_get_one(self):
         with mock.patch.dict(os.environ, {"TAIGA_URL": "https://taiga.example.com"}):
-            with self.assertRaisesRegex(core.NotLoggedIn, "TAIGA_TOKEN"):
+            with self.assertRaisesRegex(errors.NotLoggedIn, "TAIGA_TOKEN"):
                 taiga.Taiga().load_credentials()
 
     def test_logins_fail_at_once_without_a_terminal(self):

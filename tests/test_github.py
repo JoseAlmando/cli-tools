@@ -5,13 +5,15 @@ import os
 import unittest
 from unittest import mock
 
-from cli_tools import core, github
-from cli_tools.core import HttpError, ToolError
+from cli_tools.core import credentials, errors, http
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.github import cli as github
+from cli_tools.tools.github.client import HEADERS
 from tests.helpers import TempConf
 
 
 class FakeGitHub:
-    """Answers core.send by URL and records every request."""
+    """Answers http.send by URL and records every request."""
 
     def __init__(self, routes):
         self.routes = routes
@@ -28,7 +30,7 @@ class FakeGitHub:
 def run(argv, routes, stdin=""):
     fake = FakeGitHub(routes)
     out = io.StringIO()
-    with mock.patch.object(core, "send", fake), mock.patch("sys.stdin", io.StringIO(stdin)), \
+    with mock.patch.object(http, "send", fake), mock.patch("sys.stdin", io.StringIO(stdin)), \
             contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
         code = github.main(argv)
     return code, out.getvalue(), fake.requests
@@ -41,9 +43,9 @@ class GitHubLoginTests(TempConf):
     def test_login_checks_the_token_and_saves_it(self):
         _, _, sent = run(["login", "--token-stdin"], {USER: (200, '{"login": "bot"}', {})}, stdin="tok\n")
         self.assertEqual(sent[0].get_header("Authorization"), "Bearer tok")
-        for name, value in github.HEADERS.items():
+        for name, value in HEADERS.items():
             self.assertEqual(sent[0].get_header(name.capitalize()), value)
-        self.assertEqual(core.read_json_file(github.GitHub().credentials_file), {"token": "tok"})
+        self.assertEqual(credentials.read_json_file(github.GitHub().credentials_file), {"token": "tok"})
 
     def test_a_rejected_token_is_not_saved(self):
         with self.assertRaisesRegex(ToolError, "rejected"):
@@ -55,7 +57,7 @@ class GitHubLoginTests(TempConf):
             run(["login"], {})
 
     def test_tokens_from_the_environment_win_over_the_file(self):
-        core.write_private_json(github.GitHub().credentials_file, {"token": "saved"})
+        credentials.write_private_json(github.GitHub().credentials_file, {"token": "saved"})
         with mock.patch.dict(os.environ, {"GH_TOKEN": "gh"}):
             self.assertEqual(github.GitHub().load_credentials()["token"], "gh")
             with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "github"}):
@@ -63,14 +65,14 @@ class GitHubLoginTests(TempConf):
         self.assertEqual(github.GitHub().load_credentials()["token"], "saved")
 
     def test_without_a_token_it_says_how_to_get_one(self):
-        with self.assertRaisesRegex(core.NotLoggedIn, "GITHUB_TOKEN"):
+        with self.assertRaisesRegex(errors.NotLoggedIn, "GITHUB_TOKEN"):
             github.GitHub().load_credentials()
 
 
 class GitHubApiTests(TempConf):
     def setUp(self):
         super().setUp()
-        core.write_private_json(github.GitHub().credentials_file, {"token": "secret-token"})
+        credentials.write_private_json(github.GitHub().credentials_file, {"token": "secret-token"})
 
     def test_all_follows_only_same_host_pages(self):
         pulls = "https://api.github.com/repos/o/r/pulls"
@@ -94,7 +96,7 @@ class GitHubApiTests(TempConf):
     def test_read_only_blocks_session_commands_and_writes(self):
         with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}):
             for argv in (["login", "--token-stdin"], ["logout"], ["token"], ["POST", "user/repos", "-d", "{}"]):
-                with self.subTest(argv=argv), self.assertRaises(core.ReadOnlyError):
+                with self.subTest(argv=argv), self.assertRaises(errors.ReadOnlyError):
                     run(argv, {}, stdin="tok\n")
             code, _, _ = run(["GET", "user"], {USER: (200, '{"login": "bot"}', {})})
         self.assertEqual(code, 0)
@@ -145,7 +147,7 @@ class ProtectTests(TempConf):
         self.assertEqual(planned[1]["body"], github.RULESETS[1])
 
     def test_read_only_blocks_it(self):
-        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(core.ReadOnlyError):
+        with mock.patch.dict(os.environ, {"CLT_READONLY": "1"}), self.assertRaises(errors.ReadOnlyError):
             calls, _ = self.protect([])
 
     def test_needs_owner_and_repo(self):

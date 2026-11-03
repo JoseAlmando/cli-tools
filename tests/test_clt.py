@@ -6,8 +6,9 @@ import unittest
 from pathlib import Path
 
 import cli_tools
-from cli_tools import __version__, clt
-from cli_tools.core import ToolError
+from cli_tools import __version__
+from cli_tools import cli as clt
+from cli_tools.core.errors import ToolError
 from tests.helpers import TempConf
 
 

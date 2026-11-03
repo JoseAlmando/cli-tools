@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-from .core import ToolError
+from cli_tools.core.errors import ToolError
 
 BUMPS = ("fix", "feat", "major")
 SEMVER = re.compile(r"\d+\.\d+\.\d+")

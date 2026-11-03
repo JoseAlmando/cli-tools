@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli_tools import versions
-from cli_tools.core import ToolError
+from cli_tools.commands.release import versions
+from cli_tools.core.errors import ToolError
 
 PYPROJECT = '[build-system]\nrequires = ["setuptools"]\n\n[project]\nname = "demo"\nversion = "1.2.3"\n\n[tool.x]\nversion = "9.9.9"\n'
 CSPROJ = '<Project Sdk="Microsoft.NET.Sdk">\r\n  <PropertyGroup>\r\n    <Version>1.2.3</Version>\r\n  </PropertyGroup>\r\n</Project>\r\n'

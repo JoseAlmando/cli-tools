@@ -1,5 +1,5 @@
 import sys
 
-from .clt import run
+from cli_tools.cli import run
 
 sys.exit(run())
