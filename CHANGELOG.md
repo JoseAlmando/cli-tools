@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 - 2026-11-03
+
+### Fixes
+
+- fix(release): talk to origin once to check and once to push
+- fix: read the version from pyproject.toml when running from the source tree
+
+### Other
+
+- chore: add instructions for AI coding agents and a private-word check
+- Merge branch 'main' into chore/agent-instructions
+- test: accept Windows path separators in the private-word list message
+- Merge pull request #31 from chore/agent-instructions
+
 ## 0.2.0 - 2026-11-03
 
 ### Features
