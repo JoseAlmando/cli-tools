@@ -329,6 +329,50 @@ class PublishTests(ReleaseRepo):
         self.assertEqual((result["pushed"], result["release_url"]),
                          (True, "https://github.com/o/r/releases/tag/v0.2.0"))
 
+    def talks(self):
+        """Records every git command that contacts origin (one SSH connection each)."""
+        calls = []
+        real_run, real_push = gitrepo._run, gitrepo.push
+
+        def run(root, *args):
+            if args[0] in ("fetch", "ls-remote", "push", "pull"):
+                calls.append(args[0])
+            return real_run(root, *args)
+
+        def push(root, *refspecs):
+            calls.append("push " + " ".join(refspecs))
+            return real_push(root, *refspecs)
+
+        mock.patch.object(gitrepo, "_run", run).start()
+        mock.patch.object(gitrepo, "push", push).start()
+        self.addCleanup(mock.patch.stopall)
+        return calls
+
+    def test_a_release_contacts_origin_twice_and_says_what_it_pushes(self):
+        calls = self.talks()
+        _, _, err = self.release("--skip-tests", stdin="2\ny\n", tty=True)
+        talked = list(calls)
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.assertEqual([c.split()[0] for c in talked], ["ls-remote", "push"])
+        self.assertIn("refs/tags/v0.2.0", talked[1])
+        self.assertIn("Pushing main and v0.2.0 to origin", err)
+
+    def test_publish_resumes_with_one_look_and_one_push(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        calls = self.talks()
+        self.release("--publish")
+        talked = list(calls)
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.assertEqual([c.split()[0] for c in talked], ["ls-remote", "push"])
+
+    def test_publish_pushes_nothing_that_origin_already_has(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.git("push", "--quiet", "origin", "main", "v0.2.0")
+        calls = self.talks()
+        _, _, err = self.release("--publish")
+        self.assertEqual(calls, ["ls-remote"])
+        self.assertEqual(len(self.publisher.created), 1)
+
     def test_no_or_enter_at_the_question_keeps_it_local(self):
         for answer in ("n\n", "\n"):
             with self.subTest(answer=answer):
