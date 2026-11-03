@@ -4,7 +4,8 @@ import subprocess
 
 from cli_tools.core.errors import ToolError
 
-RELEASE_COMMIT = re.compile(r"Release \d+\.\d+\.\d+$")
+# What clt release commits: "chore(release): X.Y.Z" now, "Release X.Y.Z" before
+RELEASE_COMMIT = re.compile(r"(Release|chore\(release\):) \d+\.\d+\.\d+$")
 
 
 def _run(root, *args):
@@ -52,7 +53,7 @@ def last_tag(root):
 
 
 def messages_since(root, tag):
-    """Full commit messages after tag (or all of HEAD), oldest first, without earlier "Release X.Y.Z" commits."""
+    """Full commit messages after tag (or all of HEAD), oldest first, without earlier release commits."""
     raw = git(root, "log", "--reverse", "--format=%B%x00", f"{tag}..HEAD" if tag else "HEAD")
     messages = [m.strip() for m in raw.split("\x00") if m.strip()]
     return [m for m in messages if not RELEASE_COMMIT.match(m.splitlines()[0])]

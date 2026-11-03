@@ -7,6 +7,10 @@ from cli_tools.core.errors import ToolError
 BUMPS = ("fix", "feat", "major")
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 SKIPPED_DIRS = {"bin", "obj", ".git", "node_modules"}
+# Conventional Commits: "type(scope)!: description", and a "BREAKING CHANGE: ..." footer
+COMMIT_TYPES = ("feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert")
+CONVENTIONAL_HEADER = re.compile(r"(?P<type>[A-Za-z]+)(\([^()]*\))?(?P<breaking>!)?: ")
+BREAKING_FOOTER = re.compile(r"^BREAKING[ -]CHANGE: ", re.M)
 
 
 def bump(version, kind):
@@ -25,6 +29,25 @@ def suggest_bump(subjects):
     if any(re.match(r"feat(\(.+\))?:", s) for s in subjects):
         return "feat"
     return "fix"
+
+
+def _conventional_header(message):
+    found = CONVENTIONAL_HEADER.match(message.partition("\n")[0])
+    return found if found and found.group("type").lower() in COMMIT_TYPES else None
+
+
+def is_conventional(message):
+    """Whether the commit's subject starts with a Conventional Commits prefix, such as "feat(api): "."""
+    return bool(_conventional_header(message))
+
+
+def change_kind(message):
+    """breaking (a "!" or a BREAKING CHANGE footer), feat, fix or other, for the changelog's groups."""
+    found = _conventional_header(message)
+    if (found and found.group("breaking")) or BREAKING_FOOTER.search(message.partition("\n")[2]):
+        return "breaking"
+    kind = found.group("type").lower() if found else "other"
+    return kind if kind in ("feat", "fix") else "other"
 
 
 class VersionFile:
