@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in clt does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report it. **Never paste tokens, passwords, or the contents of
+        `credentials.json`**, and replace private server names with `example.com`.
+        A security problem goes to a [private report](https://github.com/JoseAlmando/cli-tools/security/advisories/new) instead.
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Tool
+      options: ["clt taiga / taiga", "clt gitea / gitea", "clt github", "clt release", "clt update", "clt itself", "Not sure"]
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact command line, with tokens and private hosts removed. `--json` output helps.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The output or error, and the exit code (`echo $?`, or `$LASTEXITCODE` in PowerShell).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: clt version
+      description: Output of `clt --version`
+      placeholder: clt 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and Python
+      description: e.g. Windows 11 with Python 3.12, installed with uv tool install
+    validations:
+      required: true

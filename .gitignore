@@ -9,3 +9,6 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Worktrees made by AI coding agents
+.claude/worktrees/
