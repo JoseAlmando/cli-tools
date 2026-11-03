@@ -162,6 +162,8 @@ uvx ruff check .                                            # the linter, a deve
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
 | `docs/architecture.md` | How the code is organized and how to add a tool. |
 | `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
+| `AGENTS.md`, `CLAUDE.md` | Instructions for AI agents that develop `clt`: rules, checks and how work flows. |
+| `scripts/check_private_words.py` | Checks that no private word (listed in `.git/info/private-words`, never pushed) is in the repo. |
 | `.github/workflows/tests.yml` | CI: Ruff, the tests, installing with pip and with `uv tool install`, and a smoke test of the installed commands on Linux, macOS and Windows, with Python 3.9 (Linux and Windows) and 3.14. |
 | `.clt.json` | How `clt release` runs this repo's tests. Releases are cut with `clt release`. |
 
