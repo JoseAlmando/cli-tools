@@ -16,11 +16,20 @@ GATEWAY = "https://api.atlassian.com"
 TOKEN_PAGE = "https://id.atlassian.com/manage-profile/security/api-tokens"
 SCOPES = ("read:jira-work", "write:jira-work", "read:jira-user")
 REJECTED = (401, 403)
+PATH_SAFE = "/%:@!$&'()*+,;=-._~"
+QUERY_SAFE = PATH_SAFE + "?"
 _CLOUD_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def basic_header(email, token):
     return "Basic " + base64.b64encode(f"{email}:{token}".encode()).decode("ascii")
+
+
+def safe_path(path):
+    route, mark, query = path.partition("?")
+    if any(urllib.parse.unquote(part) in (".", "..") for part in route.split("/")):
+        raise ToolError(f"Paths cannot have . or .. segments (got {path!r})")
+    return urllib.parse.quote(route, safe=PATH_SAFE) + mark + urllib.parse.quote(query, safe=QUERY_SAFE)
 
 
 def check_cloud_id(value):
@@ -46,7 +55,8 @@ class Jira:
     def request(self, method, path, body=None, creds=None):
         root, prefix = self.base(creds)
         headers = {"Authorization": basic_header(creds["email"], creds["token"])}
-        return http.json_request(method, http.api_url(root, path, prefix), body, None, self.cacert, headers)
+        url = http.api_url(root, safe_path(path), prefix)
+        return http.json_request(method, url, body, None, self.cacert, headers)
 
     def cloud_id(self):
         req = urllib.request.Request(f"{self.url}/_edge/tenant_info", method="GET")
@@ -55,8 +65,10 @@ class Jira:
             _, raw, _ = http.send(req, self.cacert)
             return check_cloud_id(json.loads(raw)["cloudId"])
         except (ToolError, ValueError, KeyError, TypeError):
-            raise ToolError(f"Could not find the cloud id of {self.url} (it is the cloudId in "
-                            f"{self.url}/_edge/tenant_info); pass it with --cloud-id") from None
+            raise ToolError(f"Jira rejected the token on the site, and the cloud id of {self.url} could not be "
+                            "found to try it as a token with scopes. Check the email and the token; if the token "
+                            f"has scopes, open {self.url}/_edge/tenant_info in the browser and pass its cloudId "
+                            "with --cloud-id") from None
 
     def detect(self, email, token, cloud_id=None, scoped=False):
         creds = {"url": self.url, "email": email, "token": token, "mode": "site", "cloud_id": None}
