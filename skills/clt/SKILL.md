@@ -1,15 +1,15 @@
 ---
 name: clt
-description: Use the clt command-line tools (clt taiga, clt gitea, clt github, clt jira) to read and change Taiga projects (user stories, issues, tasks), Gitea or GitHub repositories (pull requests, branches, issues, releases) and Jira Cloud tickets (read, search, move between states, comment) through their REST APIs. Use it whenever a task needs data from or changes in Taiga, Gitea, GitHub or Jira, instead of curl, gh, an MCP server or a browser.
+description: Use the clt command-line tools (clt taiga, clt gitea, clt github, clt jira, clt azdo) to read and change Taiga projects (user stories, issues, tasks), Gitea or GitHub repositories (pull requests, branches, issues, releases), Jira Cloud tickets (read, search, move between states, comment) and Azure DevOps work items and pull requests (create tasks, change states, open, review, vote, complete) through their REST APIs. Use it whenever a task needs data from or changes in Taiga, Gitea, GitHub, Jira or Azure DevOps, instead of curl, gh, az, an MCP server or a browser.
 ---
 
-# clt: Taiga, Gitea, GitHub and Jira from the command line
+# clt: Taiga, Gitea, GitHub, Jira and Azure DevOps from the command line
 
 `clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. Every tool runs as `clt <tool>`; short names work too (`clt t`, `clt gt`, `clt gh`, `clt j`), but write the full ones so the user can read your commands.
 
 ## Before anything else
 
-- **Never log in yourself.** `clt taiga login`, `clt gitea login`, `clt github login` and `clt jira login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN` / `GITHUB_TOKEN`.
+- **Never log in yourself.** `clt taiga login`, `clt gitea login`, `clt github login`, `clt jira login` and `clt azdo login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN` / `GITHUB_TOKEN` / `JIRA_EMAIL` and `JIRA_TOKEN` / `AZDO_TOKEN`.
 - **Read freely, write only with the user's go-ahead.** Run reads with `--read-only` so a mistaken method cannot change anything. Before a `POST`, `PUT`, `PATCH` or `DELETE`, show the request with `--dry-run`, and send it only when the user agrees.
 - **Keep answers small.** Use `--fields` and `--max-items` on lists. Whole Taiga or Gitea objects are large and fill the context.
 - **Never print tokens.** Do not run `clt <tool> token` unless the user asks for a token for another script.
@@ -80,6 +80,10 @@ clt github --json --read-only GET "repos/<owner>/<repo>/releases" --fields tag_n
 ## Jira
 
 `clt jira` calls Jira Cloud (`https://<site>.atlassian.net/rest/api/3/`, or `api.atlassian.com` for tokens with scopes) with the same flags as the other tools. **Read [`references/jira.md`](references/jira.md) before any Jira call**: it has the exact recipes (JQL search, transitions, comments in ADF, assignee) and what agents get wrong. To read a ticket, use `clt jira --json --read-only issue PROJ-123`, not the raw issue JSON.
+
+## Azure DevOps
+
+`clt azdo` calls Azure DevOps Services (`https://dev.azure.com/<org>/`) with a personal access token and the same flags. **Read [`references/azure-devops.md`](references/azure-devops.md) before any Azure DevOps call**: it has the exact recipes (work items with JSON Patch, WIQL, pull requests, threads, votes, completing) and what agents get wrong.
 
 ## Releases
 

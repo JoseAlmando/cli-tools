@@ -1,14 +1,15 @@
 # cli-tools
 
-Command-line tools for the Taiga, Gitea, GitHub and Jira Cloud APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
+Command-line tools for the Taiga, Gitea, GitHub, Jira Cloud and Azure DevOps Services APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
 
 | Command | What it does |
 |---|---|
-| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`, `clt jira …`. |
+| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`, `clt jira …`, `clt azdo …`. |
 | `clt taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
 | `clt gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
 | `clt github` | GitHub API client: login in the browser or with a token, and calls to `https://api.github.com/`. |
 | `clt jira` | Jira Cloud API client: login with an Atlassian API token (classic or with scopes), calls to `/rest/api/3/`, and `clt jira issue KEY` to read a ticket as plain text. |
+| `clt azdo` | Azure DevOps Services API client: login with a personal access token, calls to `https://dev.azure.com/<org>/` with `api-version` added for you. |
 
 ## Installation
 
@@ -65,6 +66,10 @@ clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin
 clt jira login --url https://<site>.atlassian.net --create-token
 clt jira issue PROJ-123                          # summary, description and comments as Markdown
 clt jira GET "search/jql?jql=assignee=currentUser()&fields=key,summary,status" --all
+
+clt azdo login --org <organization> --create-token
+clt azdo GET _apis/projects --fields id,name
+clt azdo GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --all --fields pullRequestId,title
 ```
 
 `clt github login` offers three ways in:
@@ -76,6 +81,8 @@ clt jira GET "search/jql?jql=assignee=currentUser()&fields=key,summary,status" -
 `--no-browser` only prints the link. Authorizing in the browser needs a GitHub OAuth app with device flow enabled; `clt` ships the ID of its own, and `GITHUB_CLIENT_ID` sets another.
 
 `clt jira login` asks for your Atlassian email and an API token (`--create-token` opens id.atlassian.com first). Both kinds of token work: a classic one talks to the site, and one with scopes (`read:jira-work`, `write:jira-work`, `read:jira-user`) goes through `api.atlassian.com` with the site's cloud id, which login finds on its own (`--cloud-id` gives it, `--scoped` skips the check). `clt jira issue KEY` prints a ticket's summary, people, links, subtasks, description and last comments, with Jira's rich text turned into plain text.
+
+`clt azdo login` asks for a personal access token (`--create-token` opens the organization's token page and lists the scopes to tick: Work Items, Code, and Project and Team). Paths are relative to `https://dev.azure.com/<org>/`; `clt` adds `api-version=7.1` when a path has none, sends JSON Patch when creating or updating a work item, and follows both kinds of paging (`x-ms-continuationtoken` and `$top`/`$skip`) with `--all`.
 
 `clt --help` and each tool's `--help` (`clt taiga --help`, …) list the commands and the environment variables.
 
@@ -115,7 +122,7 @@ Settings per repo go in an optional `.clt.json`:
 
 Every tool can run unattended:
 
-- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN`, `GITEA_TOKEN` or `JIRA_EMAIL` with `JIRA_TOKEN`, and `clt taiga login --user <u> --password-stdin` reads the password from stdin.
+- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN`, `GITEA_TOKEN`, `JIRA_EMAIL` with `JIRA_TOKEN`, or `AZDO_TOKEN`, and `clt taiga login --user <u> --password-stdin` reads the password from stdin.
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one, and makes `me` print a JSON object (`id`, `username`, `full_name`, `email`, `url`, `credentials_file`, and `expires_at` in Gitea).
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
@@ -123,7 +130,7 @@ Every tool can run unattended:
 
 `--json` and `--read-only` can go anywhere on the command line.
 
-[`skills/clt/SKILL.md`](skills/clt/SKILL.md) is a skill for Claude Code (and other agents that read skills): it explains these rules and has recipes for the common Taiga and Gitea calls, and `skills/clt/references/jira.md` for Jira. To use it in Claude Code:
+[`skills/clt/SKILL.md`](skills/clt/SKILL.md) is a skill for Claude Code (and other agents that read skills): it explains these rules and has recipes for the common Taiga and Gitea calls, and `skills/clt/references/jira.md` and `skills/clt/references/azure-devops.md` for Jira and Azure DevOps. To use it in Claude Code:
 
 ```bash
 mkdir -p ~/.claude/skills && ln -s "$PWD/skills/clt" ~/.claude/skills/clt
@@ -149,6 +156,10 @@ No server is configured by default. Each tool takes it, in this order:
 | `JIRA_EMAIL`, `JIRA_TOKEN` | Atlassian account and API token to use instead of the saved session. |
 | `JIRA_CLOUD_ID` | With `JIRA_TOKEN`: the token has scopes, so calls go through `api.atlassian.com` with this cloud id. |
 | `JIRA_CONF_DIR`, `JIRA_CACERT` | Jira credentials folder (by default `~/.config/jira`) and optional extra CA. |
+| `AZDO_ORG` | Azure DevOps organization, by name or as `https://dev.azure.com/<org>`. |
+| `AZDO_TOKEN` | Personal access token to use instead of the saved session (`AZURE_DEVOPS_EXT_PAT`, the Azure CLI's name, works too). |
+| `AZDO_API_VERSION` | The `api-version` added to paths without one (by default `7.1`). |
+| `AZDO_CONF_DIR`, `AZDO_CACERT` | Azure DevOps credentials folder (by default `~/.config/azdo`) and optional extra CA. |
 | `GITEA_CLIENT_ID` | Public Gitea OAuth2 app; by default, the one Gitea has built in for `tea`. |
 | `GITEA_CALLBACK_PORT` | Local port for the browser's answer; `38291` by default. |
 | `NO_COLOR` | Turns colors off. |
@@ -171,8 +182,8 @@ uvx ruff check .                                            # the linter, a deve
 | Path | Contents |
 |---|---|
 | `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
-| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub or Jira: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `runner.run()`. |
-| `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`, `jira`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
+| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub, Jira or Azure DevOps: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `runner.run()`. |
+| `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`, `jira`, `azdo`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
 | `src/cli_tools/commands/` | `clt release` (with its version files and git helpers) and `clt update`. |
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
 | `docs/architecture.md` | How the code is organized and how to add a tool. |

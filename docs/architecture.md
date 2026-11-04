@@ -14,7 +14,7 @@ src/cli_tools/
 │   ├── errors.py        ToolError, NotLoggedIn, ReadOnlyError, HttpError, exit codes, error_detail
 │   ├── context.py       CLIContext (--json, --read-only), the global flags, require_terminal
 │   ├── output.py        colors, info(), printing JSON responses and headers
-│   ├── http.py          the configured server, api_url, HTTPS without redirects, json_request, parse_json
+│   ├── http.py          the configured server, api_url, safe_path, HTTPS without redirects, json_request, parse_json
 │   ├── credentials.py   credential files: 0600 in a 0700 folder, written atomically
 │   ├── api.py           the api command: METHOD path [-d JSON], --all, --fields, --max-items, --dry-run
 │   └── runner.py        run(main): global flags, then errors turned into messages and exit codes
@@ -23,8 +23,10 @@ src/cli_tools/
 │   ├── gitea/           client.py, cli.py, and auth.py (OAuth2 + PKCE login in the browser)
 │   ├── github/          client.py (session, renewal of expiring tokens), cli.py, and auth.py (device flow, token refresh
 │   │                    and the pre-filled token page; only as clt github)
-│   └── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
-│                        to plain text), cli.py (login, me, issue, api; only as clt jira)
+│   ├── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
+│   │                    to plain text), cli.py (login, me, issue, api; only as clt jira)
+│   └── azdo/            client.py (organization, PAT as Basic auth, api-version, JSON Patch, paging hooks), cli.py
+│                        (login, me, api; only as clt azdo)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
     └── update.py        clt update
