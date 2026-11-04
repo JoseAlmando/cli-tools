@@ -5,14 +5,14 @@ description: Use the clt command-line tools (clt taiga, clt gitea, clt github, c
 
 # clt: Taiga, Gitea, GitHub and Jira from the command line
 
-`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. The Taiga and Gitea tools are also installed as `taiga` and `gitea`.
+`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. Every tool runs as `clt <tool>`; short names work too (`clt t`, `clt gt`, `clt gh`, `clt j`), but write the full ones so the user can read your commands.
 
 ## Before anything else
 
-- **Never log in yourself.** `taiga login`, `gitea login` and `clt github login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN` / `GITHUB_TOKEN`.
+- **Never log in yourself.** `clt taiga login`, `clt gitea login`, `clt github login` and `clt jira login` need a person; without a terminal they fail at once. If a command exits with code 3 (not logged in), ask the user to run the login, or to set `TAIGA_TOKEN` / `GITEA_TOKEN` / `GITHUB_TOKEN`.
 - **Read freely, write only with the user's go-ahead.** Run reads with `--read-only` so a mistaken method cannot change anything. Before a `POST`, `PUT`, `PATCH` or `DELETE`, show the request with `--dry-run`, and send it only when the user agrees.
 - **Keep answers small.** Use `--fields` and `--max-items` on lists. Whole Taiga or Gitea objects are large and fill the context.
-- **Never print tokens.** Do not run `taiga token` or `gitea token` unless the user asks for a token for another script.
+- **Never print tokens.** Do not run `clt <tool> token` unless the user asks for a token for another script.
 
 ## Command shape
 
@@ -101,7 +101,7 @@ The release commit and the annotated tag's message are `chore(release): X.Y.Z` (
 
 | Exit code / message | What to do |
 |---|---|
-| 3, "Not logged in" | Ask the user to run `taiga login` / `gitea login` in a terminal, or to set the token variable. |
+| 3, "Not logged in" | Ask the user to run `clt <tool> login` in a terminal, or to set the token variable. |
 | 4, "read-only mode" | Expected under `--read-only`. Drop the flag only once the user approved the write. |
 | 1 with `"status": 401` | The session expired and could not be renewed: ask the user to log in again. |
 | 1 with `"status": 404` | Wrong path or id. Check the recipe, or list the parent collection first. |

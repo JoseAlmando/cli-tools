@@ -39,10 +39,10 @@ Dependencies go one way:
 
 ## How a command runs
 
-1. The console script (`clt`, `taiga` or `gitea`, declared in `pyproject.toml`) calls `run()`, which calls `core.runner.run(main)`.
+1. The console script `clt` (the only one declared in `pyproject.toml`) calls `cli.run()`, which calls `core.runner.run(main)`.
 2. `run` sets up the output streams and takes `--json` and `--read-only` out of the arguments, wherever they are, into a `CLIContext` (the environment variables `CLT_JSON` and `CLT_READONLY` can turn them on too). It never writes them to `os.environ`, so the processes `clt` starts (a project's tests in `clt release`, `uv` in `clt update`) do not inherit them.
 3. `run` calls `main(argv, ctx=ctx)`. For `clt`, `cli.main` looks the first argument up in `registry.TOOLS`, imports that module and calls its `main(rest, ctx=ctx, prog="clt <name>")`.
-4. A tool's `main` parses its arguments with argparse, checks read-only mode for the session commands (`ctx.check_session_command`), stores the context in `args.ctx`, and runs the command function with its client.
+4. A tool's `main` parses its arguments with argparse, turns a short command name into the full one (`context.canonical_command`), checks read-only mode for the session commands (`ctx.check_session_command`), stores the context in `args.ctx`, and runs the command function with its client.
 5. Expected errors are `ToolError` subclasses; `run` prints them (one JSON line on stderr with `--json`) and returns their exit code: `0` success, `1` error, `2` wrong usage (argparse), `3` not logged in, `4` blocked by read-only mode.
 
 ### CLIContext
@@ -59,7 +59,7 @@ Dependencies go one way:
 | `http` | `resolve_url(cli_url, env_url, credentials_file, prog, var)` picks the server (login's `--url`, then the environment, then the last session) and accepts only `https://server`. `api_url(base, path, prefix)` accepts only paths relative to the API, so the token never leaves that server. `json_request(method, url, body, token, cacert, headers)` sends it without following redirects. `parse_json(raw, what)` fails with a clear message. |
 | `credentials` | `write_private_json(path, data)` and `read_json_file(path)` for the saved session. |
 | `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page, items_key, join)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. A tool passes `next_page(headers, body, path)` when the next page is in the body, `items_key(data)` when lists come inside an object (`{"issues": [...]}`) so `--fields` and `--max-items` reach them, and `join(pages)` to merge pages into that object. `set_query(path, params)` sets or removes query parameters of a relative path. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. |
-| `runner` | `run(main)`, for each console script. |
+| `runner` | `run(main)`, for the `clt` console script. |
 
 ## Adding a tool
 
@@ -76,6 +76,7 @@ Say the new service is Linear.
         if not args.command:
             parser.print_help()
             return 2
+        args.command = context.canonical_command(args.command)
         ctx.check_session_command(args.command)
         args.ctx = ctx
         return args.func(Linear(), args)
@@ -83,7 +84,7 @@ Say the new service is Linear.
 
 3. **Tool-specific authentication** (a browser flow, a callback server, a signing scheme) goes in the tool's own package, as `auth.py` does for Gitea. Keep `core` free of it.
 4. **Register it**: one line in `src/cli_tools/registry.py`, `("linear", "cli_tools.tools.linear.cli", "client for the Linear API")`. `clt linear ...` and `clt --help` pick it up; no other module changes.
-5. **Optionally, a standalone command**: add `def run(): return runner.run(main)` to `cli.py` and a line under `[project.scripts]` in `pyproject.toml`, `linear = "cli_tools.tools.linear.cli:run"`. Leave it out when the name could clash with another program (that is why GitHub is only `clt github`).
+5. **A short name, if it helps**: one entry in `registry.ALIASES` (`"ln": "linear"`). No tool gets a console script of its own; `clt` is the only one. Session commands get their short names (`lg`, `rfh`, `lo`, `tk`) by passing `aliases=context.command_aliases(name)` to `add_parser`; `tests/test_registry.py` checks that no alias clashes with a tool, a command or an HTTP method.
 6. **Tests** in `tests/test_linear.py`, with no network: patch `cli_tools.core.http.send`, or a client's `request`/`call`, and use `tests.helpers.TempConf` for a private credentials folder. `tests/test_contracts.py` shows how to drive the real entry points against a fake server.
 7. **Docs**: the README tables, and `skills/clt/SKILL.md` if agents should use it.
 
