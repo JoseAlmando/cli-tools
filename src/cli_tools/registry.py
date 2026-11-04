@@ -11,6 +11,7 @@ TOOLS = (
     ("azdo", "cli_tools.tools.azdo.cli", "client for the Azure DevOps Services API, with a personal access token"),
     ("release", "cli_tools.commands.release.cli", "bump the version, update the changelog, tag and publish a release"),
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
+    ("skill", "cli_tools.commands.skill", "install clt's skill for Claude Code, Codex or Gemini CLI"),
 )
 
 ALIASES = {"t": "taiga", "gt": "gitea", "gh": "github", "j": "jira", "ad": "azdo"}

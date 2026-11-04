@@ -38,6 +38,7 @@ tools:
   azdo, ad     client for the Azure DevOps Services API, with a personal access token
   release      bump the version, update the changelog, tag and publish a release
   update       install the latest release of clt, or a given version
+  skill        install clt's skill for Claude Code, Codex or Gemini CLI
 
 Each tool has its own help: clt taiga --help, clt github --help.
 Short names for commands: login lg, refresh rfh, logout lo, token tk, issue i.
@@ -163,7 +164,7 @@ class HelpAndVersionTests(TempConf):
                  ("clt", ["update"], "usage: clt update "), ("clt", ["t"], "usage: clt taiga "),
                  ("clt", ["gt"], "usage: clt gitea "), ("clt", ["gh"], "usage: clt github "),
                  ("clt", ["j"], "usage: clt jira "), ("clt", ["j", "i"], "usage: clt jira issue "),
-                 ("clt", ["ad"], "usage: clt azdo ")]
+                 ("clt", ["ad"], "usage: clt azdo "), ("clt", ["skill"], "usage: clt skill ")]
         for script, argv, usage in cases:
             with self.subTest(script=script, argv=argv):
                 code, out, _ = run_process(script, *argv, "--help")
