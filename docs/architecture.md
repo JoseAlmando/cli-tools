@@ -9,7 +9,8 @@ src/cli_tools/
 ├── __init__.py          the version (from the installed metadata, or pyproject.toml in a checkout)
 ├── __main__.py          python -m cli_tools
 ├── cli.py               the clt command: help, --version, and handing the arguments to a tool
-├── registry.py          every command clt runs: (name, module, one-line description)
+├── registry.py          every command clt runs: (name, module, one-line description), and the short names
+├── skill/               the skill for AI agents (SKILL.md, references/), shipped as package data
 ├── core/                shared building blocks, no service-specific code
 │   ├── errors.py        ToolError, NotLoggedIn, ReadOnlyError, HttpError, exit codes, error_detail
 │   ├── context.py       CLIContext (--json, --read-only), the global flags, require_terminal
@@ -17,6 +18,7 @@ src/cli_tools/
 │   ├── http.py          the configured server, api_url, safe_path, HTTPS without redirects, json_request, parse_json
 │   ├── credentials.py   credential files: 0600 in a 0700 folder, written atomically
 │   ├── api.py           the api command: METHOD path [-d JSON], --all, --fields, --max-items, --dry-run
+│   ├── mcp.py           the mcp command: an agent's "mcp add" command for an HTTP or stdio server, printed or run
 │   └── runner.py        run(main): global flags, then errors turned into messages and exit codes
 ├── tools/               the API clients, one package each
 │   ├── taiga/           client.py (server, session, token renewal) and cli.py (commands, main, run)
@@ -24,12 +26,13 @@ src/cli_tools/
 │   ├── github/          client.py (session, renewal of expiring tokens), cli.py, and auth.py (device flow, token refresh
 │   │                    and the pre-filled token page; only as clt github)
 │   ├── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
-│   │                    to plain text), cli.py (login, me, issue, api; only as clt jira)
+│   │                    to plain text), cli.py (login, me, issue, mcp, api)
 │   └── azdo/            client.py (organization, PAT as Basic auth, api-version, JSON Patch, paging hooks), cli.py
-│                        (login, me, api; only as clt azdo)
+│                        (login, me, mcp, api)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
-    └── update.py        clt update
+    ├── skill.py         clt skill: install, uninstall and refresh the skill in the agents' folders
+    └── update.py        clt update (then clt skill refresh)
 ```
 
 Dependencies go one way:
@@ -88,7 +91,7 @@ Say the new service is Linear.
 4. **Register it**: one line in `src/cli_tools/registry.py`, `("linear", "cli_tools.tools.linear.cli", "client for the Linear API")`. `clt linear ...` and `clt --help` pick it up; no other module changes.
 5. **A short name, if it helps**: one entry in `registry.ALIASES` (`"ln": "linear"`). No tool gets a console script of its own; `clt` is the only one. Session commands get their short names (`lg`, `rfh`, `lo`, `tk`) by passing `aliases=context.command_aliases(name)` to `add_parser`; `tests/test_registry.py` checks that no alias clashes with a tool, a command or an HTTP method.
 6. **Tests** in `tests/test_linear.py`, with no network: patch `cli_tools.core.http.send`, or a client's `request`/`call`, and use `tests.helpers.TempConf` for a private credentials folder. `tests/test_contracts.py` shows how to drive the real entry points against a fake server.
-7. **Docs**: the README tables, and `skills/clt/SKILL.md` if agents should use it.
+7. **Docs**: the README tables, and `src/cli_tools/skill/` (`SKILL.md`, or a file under `references/` read only for that tool) if agents should use it.
 
 ## Adding a clt command that is not an API client
 

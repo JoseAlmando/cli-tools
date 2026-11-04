@@ -1,7 +1,7 @@
 # Instructions for AI coding agents
 
 This file is for agents that **develop** clt. To **use** clt (call Taiga, Gitea, GitHub, Jira or Azure DevOps from a task), read
-[`skills/clt/SKILL.md`](skills/clt/SKILL.md) instead.
+[`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md) instead (`skills/clt` is a link to that folder).
 
 ## The project
 
@@ -62,7 +62,7 @@ On Windows use `python` and set `PYTHONPATH` the PowerShell way. New behaviour n
 ## Keeping things in sync
 
 When a user or an agent would see something different, update in the same pull request: `--help` text, `README.md`,
-`docs/architecture.md`, `skills/clt/SKILL.md`, and the contract tests if a contract deliberately changes.
+`docs/architecture.md`, `src/cli_tools/skill/` (the skill and its references), and the contract tests if a contract deliberately changes.
 
 ## Adding a tool or a command
 

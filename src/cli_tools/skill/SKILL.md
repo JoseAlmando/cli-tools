@@ -14,6 +14,8 @@ description: Use the clt command-line tools (clt taiga, clt gitea, clt github, c
 - **Keep answers small.** Use `--fields` and `--max-items` on lists. Whole Taiga or Gitea objects are large and fill the context.
 - **Never print tokens.** Do not run `clt <tool> token` unless the user asks for a token for another script.
 
+MCP servers for Jira and Azure DevOps are set up by the user with `clt jira mcp` / `clt azdo mcp`; never run those yourself. When one is connected, prefer clt for anything a recipe here covers: it is checked, paged and read-only when you ask.
+
 ## Command shape
 
 ```bash
