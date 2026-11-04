@@ -4,7 +4,7 @@ import json
 import sys
 import webbrowser
 
-from cli_tools.core import api, context, output
+from cli_tools.core import api, context, mcp, output
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
 from cli_tools.tools.azdo import client
@@ -69,6 +69,18 @@ def cmd_me(azdo, args):
     print(output.out.dim(f"Token from {creds['env']}" if credentials_file is None else f"Credentials: {credentials_file}"))
 
 
+MCP_THEN = "sign in in the browser the first time the agent uses it (needs Node.js 20 or later)"
+MCP_EPILOG = ("Runs Microsoft's local server (npx @azure-devops/mcp <organization>). If your tenant offers the remote "
+              "one, https://mcp.dev.azure.com/<organization>, it needs an Entra ID app registration for Claude Code "
+              "and does not work with Codex.")
+
+
+def cmd_mcp(azdo, args):
+    org = azdo.url.rsplit("/", 1)[1]
+    command = mcp.stdio_command(args.agent, "azure-devops", mcp.npx("-y", "@azure-devops/mcp", org))
+    return mcp.run_mcp(args, args.ctx, command, MCP_THEN)
+
+
 def build_parser(prog):
     epilog = f"""\
 examples:
@@ -114,6 +126,9 @@ for scripts and AI agents (any position on the command line):
                    ).set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", aliases=context.command_aliases("token"), help="print the personal access token").set_defaults(func=cmd_token)
+    p = mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Microsoft's Azure DevOps "
+                           "MCP server to an agent", MCP_EPILOG)
+    p.add_argument("--org", help="the organization (default: AZDO_ORG or the saved session)")
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
                        lambda a, args: api.run_api(args, a.call, args.ctx, client.pager(), client.items_key,
                                                    client.join), api_prefix="/")
