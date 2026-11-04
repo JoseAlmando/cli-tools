@@ -26,7 +26,7 @@ clt <tool> <METHOD> "<path relative to /api/v1/>" [-d JSON | -d @file.json] [opt
 | `--read-only` | Only `GET` is sent; any other method exits with code 4 without sending. `login`, `refresh`, `logout` and `token` are blocked too. |
 | `--dry-run` | Prints `{"method", "path", "body"}` and sends nothing. |
 | `--fields a,b,c.d` | Keeps only these fields of each object; `c.d` reads a nested field. |
-| `--max-items N` | Keeps the first N items of a list (stderr says how many there were). |
+| `--max-items N` | Keeps the first N items of a list (stderr says how many there were); with `--all` it stops fetching pages once it has N. |
 | `--all` | Follows the pagination and joins the pages (`GET` only). |
 | `-r` | Prints the body exactly as received. |
 

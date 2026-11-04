@@ -440,8 +440,12 @@ class ApiCommandTests(TempConf):
         code, out, err, sent = run_inline("clt", "gitea", "GET", "repos/o/r/pulls", "--all", "--fields", "number",
                                           "--max-items", "1", routes=routes)
         self.assertEqual((code, json.loads(out)), (0, [{"number": 1}]))
+        self.assertEqual(len(sent), 1)
+        self.assertIn("Showing 1 items; there may be more", err)
+        code, out, err, sent = run_inline("clt", "gitea", "GET", "repos/o/r/pulls", "--all", "--fields", "number",
+                                          "--max-items", "5", routes=routes)
+        self.assertEqual((code, json.loads(out)), (0, [{"number": 1}, {"number": 2}]))
         self.assertEqual(len(sent), 2)
-        self.assertIn("1 of 2", err)
 
     def test_http_errors(self):
         routes = {("GET", f"{GITEA}/api/v1/repos/o/r"): (404, '{"message": "Not Found"}', {})}
