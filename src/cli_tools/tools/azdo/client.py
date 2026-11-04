@@ -49,6 +49,10 @@ def content_type(method, path):
     return "application/json"
 
 
+def token_variable():
+    return next((name for name in TOKEN_VARS if os.environ.get(name)), None)
+
+
 class AzureDevOps:
     def __init__(self, org=None, require_url=True):
         self.conf_dir = Path(os.environ.get("AZDO_CONF_DIR") or Path.home() / ".config" / "azdo")
@@ -95,17 +99,25 @@ class AzureDevOps:
         credentials.write_private_json(self.credentials_file, {"url": self.url, "token": token})
 
     def load_credentials(self):
-        token = next((os.environ[name] for name in TOKEN_VARS if os.environ.get(name)), None)
-        if token:
-            return {"url": self.url, "token": token, "env": True}
+        name = token_variable()
+        if name:
+            return {"url": self.url, "token": os.environ[name], "env": name}
         creds = credentials.read_json_file(self.credentials_file)
-        if creds is None and not self.credentials_file.exists():
+        only_org = isinstance(creds, dict) and creds.get("url") and not creds.get("token")
+        if (creds is None and not self.credentials_file.exists()) or only_org:
             raise NotLoggedIn("Not logged in; run " + output.err.bold(f"{PROG} login") + " or set AZDO_TOKEN")
         if not isinstance(creds, dict) or not creds.get("token"):
             raise ToolError(f"{self.credentials_file} is incomplete; run {PROG} login")
         if creds.get("url") != self.url:
             raise ToolError(f"The saved session is for {creds.get('url')}, not {self.url}; run {PROG} login")
         return creds
+
+    def forget_token(self):
+        saved = credentials.read_json_file(self.credentials_file)
+        if isinstance(saved, dict) and saved.get("url"):
+            credentials.write_private_json(self.credentials_file, {"url": saved["url"]})
+        else:
+            self.credentials_file.unlink(missing_ok=True)
 
     def call(self, method, path, body):
         return self.request(method, path, body, self.load_credentials()["token"])
