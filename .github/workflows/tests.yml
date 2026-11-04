@@ -95,9 +95,9 @@ jobs:
           expect() { local want=$1; shift; set +e; "$@"; local got=$?; set -e
                      [ "$got" -eq "$want" ] || { echo "::error::$* exited $got, expected $want"; exit 1; }; }
           clt --version
-          taiga --help > /dev/null
-          gitea --help > /dev/null
+          clt taiga --help > /dev/null
+          clt gt --help > /dev/null
           expect 3 clt taiga --json me
           expect 3 clt gitea --json me
-          TAIGA_TOKEN=t expect 4 taiga --json --read-only POST tasks -d '{}'
-          GITEA_TOKEN=t expect 4 gitea --json --read-only token
+          TAIGA_TOKEN=t expect 4 clt t --json --read-only POST tasks -d '{}'
+          GITEA_TOKEN=t expect 4 clt gt --json --read-only tk
