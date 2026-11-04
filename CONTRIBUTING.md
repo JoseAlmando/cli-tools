@@ -7,7 +7,7 @@ Thanks for helping with `clt`. This page covers setting up a checkout, and the c
 You need Python 3.9 or later, git and [uv](https://docs.astral.sh/uv/). From a clone:
 
 ```bash
-uv tool install -e .        # clt, taiga and gitea now run this checkout; changes take effect right away
+uv tool install -e .        # clt now runs this checkout; changes take effect right away
 python scripts/check_conventions.py install-hook   # checks each commit message as you commit
 ```
 
