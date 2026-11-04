@@ -1,0 +1,146 @@
+import json
+import os
+import unittest
+from unittest import mock
+
+from cli_tools.core import credentials, errors, http
+from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.tools.jira import client
+from cli_tools.tools.jira.client import Jira
+from tests.helpers import TempConf
+
+SITE = "https://example.atlassian.net"
+CLOUD = "11111111-2222-3333-4444-555555555555"
+GATEWAY_API = f"https://api.atlassian.com/ex/jira/{CLOUD}/rest/api/3/"
+SITE_API = f"{SITE}/rest/api/3/"
+TENANT = f"{SITE}/_edge/tenant_info"
+ME = {"accountId": "acc-1", "displayName": "Bot User", "emailAddress": "me@example.com"}
+
+
+class FakeJira:
+    def __init__(self, routes):
+        self.routes = routes
+        self.requests = []
+
+    def __call__(self, req, cacert):
+        self.requests.append(req)
+        key = (req.get_method(), req.full_url)
+        if key not in self.routes:
+            raise AssertionError(f"unexpected request {key}")
+        answer = self.routes[key]
+        if isinstance(answer, list):
+            answer = answer.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        return status, body if isinstance(body, str) else json.dumps(body), {}
+
+
+def fake(routes):
+    return mock.patch.object(http, "send", FakeJira(routes))
+
+
+def unauthorized():
+    return HttpError(401, '{"message": "Client must be authenticated"}')
+
+
+class JiraClientTests(TempConf):
+    def test_basic_header(self):
+        self.assertEqual(client.basic_header("me@example.com", "tok"), "Basic bWVAZXhhbXBsZS5jb206dG9r")
+
+    def test_classic_token_stays_on_the_site(self):
+        with fake({("GET", SITE_API + "myself"): (200, ME)}) as send:
+            creds, me = Jira(SITE).detect("me@example.com", "tok")
+        self.assertEqual((creds["mode"], creds["cloud_id"]), ("site", None))
+        self.assertEqual(me["accountId"], "acc-1")
+        self.assertEqual(len(send.requests), 1)
+        self.assertEqual(send.requests[0].get_header("Authorization"), client.basic_header("me@example.com", "tok"))
+
+    def test_scoped_token_is_detected_through_tenant_info(self):
+        routes = {("GET", SITE_API + "myself"): unauthorized(), ("GET", TENANT): (200, {"cloudId": CLOUD}),
+                  ("GET", GATEWAY_API + "myself"): (200, ME)}
+        with fake(routes) as send:
+            creds, _ = Jira(SITE).detect("me@example.com", "tok")
+        self.assertEqual(creds, {"url": SITE, "email": "me@example.com", "token": "tok", "mode": "scoped",
+                                 "cloud_id": CLOUD})
+        tenant = next(r for r in send.requests if r.full_url == TENANT)
+        self.assertIsNone(tenant.get_header("Authorization"))
+
+    def test_scoped_flag_skips_the_site(self):
+        with fake({("GET", GATEWAY_API + "myself"): (200, ME)}) as send:
+            creds, _ = Jira(SITE).detect("me@example.com", "tok", cloud_id=CLOUD, scoped=True)
+        self.assertEqual(creds["mode"], "scoped")
+        self.assertEqual([r.full_url for r in send.requests], [GATEWAY_API + "myself"])
+
+    def test_rejected_everywhere_saves_nothing(self):
+        routes = {("GET", SITE_API + "myself"): unauthorized(), ("GET", TENANT): (200, {"cloudId": CLOUD}),
+                  ("GET", GATEWAY_API + "myself"): unauthorized()}
+        with fake(routes), self.assertRaisesRegex(ToolError, "rejected"):
+            Jira(SITE).detect("me@example.com", "bad")
+        self.assertFalse(Jira(SITE).credentials_file.exists())
+
+    def test_tenant_info_unusable_says_how_to_pass_the_cloud_id(self):
+        for answer in (HttpError(404, "Not Found"), (200, "not json"), (200, {}), ToolError("Cannot connect")):
+            with self.subTest(answer=answer):
+                routes = {("GET", SITE_API + "myself"): unauthorized(), ("GET", TENANT): answer}
+                with fake(routes), self.assertRaisesRegex(ToolError, "--cloud-id"):
+                    Jira(SITE).detect("me@example.com", "tok")
+
+    def test_cloud_id_must_be_a_uuid(self):
+        for value in ("../x", "abc", "", None, CLOUD + "/x"):
+            with self.subTest(value=value), self.assertRaises(ToolError):
+                client.check_cloud_id(value)
+        self.assertEqual(client.check_cloud_id(CLOUD.upper()), CLOUD)
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok", "JIRA_CLOUD_ID": "../x"}
+        with mock.patch.dict(os.environ, env), fake({}) as send, self.assertRaises(ToolError):
+            Jira().call("GET", "myself", None)
+        self.assertEqual(send.requests, [])
+
+    def test_environment_wins_and_picks_the_mode(self):
+        Jira(SITE).save_credentials({"url": SITE, "email": "saved@example.com", "token": "saved", "mode": "site",
+                                     "cloud_id": None})
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
+        with mock.patch.dict(os.environ, env):
+            with fake({("GET", SITE_API + "myself"): (200, ME)}) as send:
+                Jira().call("GET", "myself", None)
+            self.assertEqual(send.requests[0].get_header("Authorization"), client.basic_header("me@example.com", "tok"))
+            with mock.patch.dict(os.environ, {"JIRA_CLOUD_ID": CLOUD}), \
+                    fake({("GET", GATEWAY_API + "myself"): (200, ME)}) as send:
+                Jira().call("GET", "myself", None)
+            self.assertEqual(send.requests[0].full_url, GATEWAY_API + "myself")
+
+    def test_saved_scoped_session_goes_through_the_gateway(self):
+        Jira(SITE).save_credentials({"url": SITE, "email": "me@example.com", "token": "tok", "mode": "scoped",
+                                     "cloud_id": CLOUD})
+        with mock.patch.dict(os.environ, {"JIRA_URL": SITE}), \
+                fake({("GET", GATEWAY_API + "issue/A-1"): (200, {"key": "A-1"})}) as send:
+            Jira().call("GET", "issue/A-1", None)
+        self.assertEqual(send.requests[0].full_url, GATEWAY_API + "issue/A-1")
+        saved = credentials.read_json_file(Jira(SITE).credentials_file)
+        self.assertEqual(saved["mode"], "scoped")
+
+    def test_not_logged_in(self):
+        with mock.patch.dict(os.environ, {"JIRA_URL": SITE}), self.assertRaisesRegex(errors.NotLoggedIn, "JIRA_TOKEN"):
+            Jira().load_credentials()
+
+    def test_session_for_another_site_is_refused(self):
+        Jira("https://other.atlassian.net").save_credentials(
+            {"url": "https://other.atlassian.net", "email": "e", "token": "t", "mode": "site", "cloud_id": None})
+        with mock.patch.dict(os.environ, {"JIRA_URL": SITE}), self.assertRaisesRegex(ToolError, "other.atlassian.net"):
+            Jira().load_credentials()
+
+    def test_env_site_401_mentions_jira_cloud_id(self):
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
+        with mock.patch.dict(os.environ, env), fake({("GET", SITE_API + "myself"): unauthorized()}), \
+                self.assertRaisesRegex(ToolError, "JIRA_CLOUD_ID"):
+            Jira().call("GET", "myself", None)
+
+    def test_paths_cannot_leave_the_api(self):
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
+        with mock.patch.dict(os.environ, env), fake({}) as send, self.assertRaises(ToolError):
+            Jira().call("GET", "https://evil.example/x", None)
+        self.assertEqual(send.requests, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
