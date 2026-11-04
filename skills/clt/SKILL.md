@@ -22,10 +22,10 @@ clt <tool> <METHOD> "<path relative to /api/v1/>" [-d JSON | -d @file.json] [opt
 
 | Option | Use |
 |---|---|
-| `--json` | Errors as one JSON line on stderr: `{"error", "status", ...}`. Use it always, and parse stderr on failure. `me` prints `{"id", "username", "full_name", "email", "url", ...}`. |
+| `--json` | Errors as one JSON line on stderr: `{"error", "status", ...}`. Use it always, and parse stderr on failure. `me` prints `{"id", "username", "full_name", "email", "url", ...}`; it takes no `--fields`, which, like the other options below, belongs to API calls. |
 | `--read-only` | Only `GET` is sent; any other method exits with code 4 without sending. `login`, `refresh`, `logout` and `token` are blocked too. |
 | `--dry-run` | Prints `{"method", "path", "body"}` and sends nothing. |
-| `--fields a,b,c.d` | Keeps only these fields of each object; `c.d` reads a nested field. |
+| `--fields a,b,c.d` | Keeps only these fields of each object; `c.d` reads a nested field and comes back as a flat key, `{"c.d": ...}` (in jq, `.["c.d"]`). A list inside an object (`{"value": [...]}`, `{"issues": [...]}`) keeps its envelope: use `.value[]`, not `.[]`. |
 | `--max-items N` | Keeps the first N items of a list (stderr says how many there were); with `--all` it stops fetching pages once it has N. |
 | `--all` | Follows the pagination and joins the pages (`GET` only). |
 | `-r` | Prints the body exactly as received. |
@@ -110,4 +110,4 @@ The release commit and the annotated tag's message are `chore(release): X.Y.Z` (
 | 1 with `"status": 401` | The session expired and could not be renewed: ask the user to log in again. |
 | 1 with `"status": 404` | Wrong path or id. Check the recipe, or list the parent collection first. |
 | 1 with `"status": 400` on a Taiga `PATCH` | Usually a stale `version`: read the object again and retry with the new `version`. |
-| "No server configured" | Ask the user for the server, or which `TAIGA_URL` / `GITEA_URL` to use. |
+| "No server configured" / "No organization configured" | Ask the user for the server, or which `TAIGA_URL` / `GITEA_URL` / `JIRA_URL` / `AZDO_ORG` to use. |
