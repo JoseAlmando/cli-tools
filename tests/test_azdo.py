@@ -212,7 +212,7 @@ class AzdoCliTests(TempConf):
         self.assertNotIn("pat", err)
 
     def test_login_rejected_saves_nothing(self):
-        with self.assertRaises(HttpError):
+        with self.assertRaises(ToolError):
             run(["login", "--org", "example", "--token-stdin"],
                 {("GET", CONNECTION): HttpError(401, "Unauthorized")}, stdin=io.StringIO("pat\n"))
         self.assertFalse(client().AzureDevOps("example").credentials_file.exists())
@@ -264,6 +264,35 @@ class AzdoCliTests(TempConf):
         self.assertEqual(sent[0].get_header("Content-type"), "application/json-patch+json")
         with self.assertRaises(errors.ReadOnlyError):
             run(["PATCH", "_apis/wit/workitems/42", "-d", body], {}, env=env, ctx=context.CLIContext(read_only=True))
+
+    def test_login_with_a_bad_token_says_so(self):
+        with self.assertRaisesRegex(ToolError, "did not accept the token"):
+            run(["login", "--org", "example", "--token-stdin"],
+                {("GET", CONNECTION): HttpError(401, "<html><title>401</title></html>")}, stdin=io.StringIO("pat\n"))
+
+    def test_help_examples_survive_the_shell(self):
+        from cli_tools.tools.azdo import cli
+        self.assertNotRegex(cli.build_parser("clt azdo").epilog, r'"[^"\n]*\$')
+
+    def test_all_stops_when_the_server_repeats_a_page(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        base = f"{ORG}/Demo/_apis/git/repositories/web/commits?"
+        same = (200, {"count": 2, "value": [{"commitId": "a"}, {"commitId": "b"}]})
+        routes = {("GET", base + "$top=2&api-version=7.1"): same}
+        for skip in range(2, 400, 2):
+            routes[("GET", base + f"%24top=2&%24skip={skip}&api-version=7.1")] = same
+        _, out, _, sent = run(["GET", "Demo/_apis/git/repositories/web/commits?$top=2", "--all"], routes, env=env)
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(json.loads(out), {"count": 2, "value": [{"commitId": "a"}, {"commitId": "b"}]})
+        projects = f"{ORG}/_apis/projects?"
+        routes = {("GET", projects + "api-version=7.1"): (200, {"value": [1]}, {"x-ms-continuationtoken": "A"}),
+                  ("GET", projects + "continuationToken=A&api-version=7.1"): (200, {"value": [2]},
+                                                                             {"x-ms-continuationtoken": "B"}),
+                  ("GET", projects + "continuationToken=B&api-version=7.1"): (200, {"value": [3]},
+                                                                             {"x-ms-continuationtoken": "A"})}
+        _, out, _, sent = run(["GET", "_apis/projects", "--all"], routes, env=env)
+        self.assertEqual(len(sent), 3)
+        self.assertEqual(json.loads(out)["value"], [1, 2, 3])
 
     def test_logout_and_token(self):
         client().AzureDevOps("example").save_credentials("pat")

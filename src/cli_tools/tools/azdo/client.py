@@ -15,7 +15,7 @@ API_VERSION = "7.1"
 CONNECTION_DATA = "_apis/connectionData?api-version=7.1-preview"
 TOKEN_SCOPES = ("Work Items (Read & write)", "Code (Read & write)", "Project and Team (Read)")
 TOKEN_VARS = ("AZDO_TOKEN", "AZURE_DEVOPS_EXT_PAT")
-REJECTED = "Azure DevOps did not accept the token (it answered with its sign-in page); check it or run "
+REJECTED = "Azure DevOps did not accept the token ({}); check it or run " + PROG + " login"
 _ORG = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,49}")
 _PATCHED = (("POST", re.compile(r"(^|/)_apis/wit/workitems/\$[^/]+$", re.I)),
             ("PATCH", re.compile(r"(^|/)_apis/wit/workitems/\d+$", re.I)))
@@ -72,14 +72,19 @@ class AzureDevOps:
             status, raw, answer = http.json_request(method, url, body, None, self.cacert, headers)
         except HttpError as e:
             if 300 <= e.status < 400:
-                raise ToolError(REJECTED + f"{PROG} login") from None
+                raise ToolError(REJECTED.format(f"HTTP {e.status}, a redirect to its sign-in page")) from None
             raise
         if status == 203:
-            raise ToolError(REJECTED + f"{PROG} login")
+            raise ToolError(REJECTED.format("HTTP 203, its sign-in page"))
         return status, raw, answer
 
     def check_token(self, token):
-        _, raw, _ = self.request("GET", CONNECTION_DATA, None, token)
+        try:
+            _, raw, _ = self.request("GET", CONNECTION_DATA, None, token)
+        except HttpError as e:
+            if e.status not in (401, 403):
+                raise
+            raise ToolError(REJECTED.format(f"HTTP {e.status}")) from None
         data = http.parse_json(raw, "Checking the token")
         user = data.get("authenticatedUser") if isinstance(data, dict) else None
         if not isinstance(user, dict):
@@ -128,12 +133,36 @@ def next_page(headers, body=None, path=None):
     return api.set_query(path, {"$skip": int(skip) + int(top)})
 
 
+def pager():
+    seen = set()
+    previous = []
+
+    def follow(headers, body=None, path=None):
+        try:
+            data = json.loads(body) if body else None
+        except ValueError:
+            data = None
+        items = data.get("value") if isinstance(data, dict) else None
+        if items and previous and items == previous[-1]:
+            return None
+        previous.append(items)
+        following = next_page(headers, body, path)
+        if following in seen:
+            return None
+        seen.add(following)
+        return following
+
+    return follow
+
+
 def join(pages):
     key = items_key(pages[0])
     if key is None:
         return [item for page in pages for item in (page if isinstance(page, list) else [page])]
     joined = dict(pages[0])
-    joined[key] = [item for page in pages if isinstance(page, dict) for item in page.get(key) or []]
+    kept = [page for number, page in enumerate(pages) if isinstance(page, dict)
+            and not (number and page.get(key) and page.get(key) == pages[number - 1].get(key))]
+    joined[key] = [item for page in kept for item in page.get(key) or []]
     if "count" in joined:
         joined["count"] = len(joined[key])
     return joined
