@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 
 from cli_tools.core import output
 from cli_tools.core.errors import ToolError
@@ -46,18 +47,19 @@ def add_mcp_parser(sub, func, help_text, epilog=None):
 
 
 def run_mcp(args, ctx, command, then):
-    code = 0
     if args.install:
         ctx.require_writes("mcp --install")
         program = shutil.which(command[0])
         if not program:
             raise ToolError(f"{command[0]} is not on the PATH; run this where it is:\n  {shown(command)}")
-        code = subprocess.run([program, *command[1:]]).returncode
+        code = subprocess.run([program, *command[1:]], stdout=sys.stderr if ctx.json_mode else None).returncode
+        if code:
+            raise ToolError(f"{command[0]} exited {code}; the command was:\n  {shown(command)}")
     if ctx.json_mode:
-        print(json.dumps({"agent": args.agent, "command": command, "then": then, "installed": args.install and code == 0}))
+        print(json.dumps({"agent": args.agent, "command": command, "then": then, "installed": args.install}))
     elif not args.install:
         print(shown(command))
         info(output.err.dim(f"then: {then}"))
-    elif code == 0:
+    else:
         info(output.err.green("✓ ") + f"Added to {args.agent}; then: {then}")
-    return code
+    return 0
