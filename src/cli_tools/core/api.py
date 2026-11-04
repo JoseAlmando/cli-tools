@@ -45,7 +45,7 @@ def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/"):
     p.add_argument("--fields", metavar="LIST",
                    help="keep only these comma-separated fields of each object; dots reach nested ones "
                         "(e.g. ref,subject,status_extra_info.name)")
-    p.add_argument("--all", action="store_true", help=f"follow the pagination and join the pages (GET, up to {MAX_PAGES})")
+    p.add_argument("--all", action="store_true", help=f"follow the pagination and join the pages (GET, up to {MAX_PAGES} pages)")
     p.add_argument("--max-items", type=int, metavar="N",
                    help="keep only the first N items of a list; with --all, stop fetching pages once there are N")
     p.add_argument("--dry-run", action="store_true", help="print the request that would be sent and send nothing")

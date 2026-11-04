@@ -299,7 +299,27 @@ class AzdoCliTests(TempConf):
         _, out, _, _ = run(["token"], {}, env={"AZDO_ORG": "example"})
         self.assertEqual(out, "pat\n")
         run(["logout"], {})
-        self.assertFalse(client().AzureDevOps("example").credentials_file.exists())
+        self.assertEqual(credentials.read_json_file(client().AzureDevOps("example").credentials_file), {"url": ORG})
+
+    def test_logout_keeps_the_organization(self):
+        client().AzureDevOps("example").save_credentials("pat")
+        _, _, err, _ = run(["logout"], {})
+        self.assertIn("revoke", err)
+        with self.assertRaises(NotLoggedIn):
+            client().AzureDevOps().load_credentials()
+        os.environ["AZURE_DEVOPS_EXT_PAT"] = "cli"
+        self.assertEqual(client().AzureDevOps().load_credentials()["token"], "cli")
+
+    def test_login_warns_when_a_token_is_in_the_environment(self):
+        _, _, err, _ = run(["login", "--org", "example", "--token-stdin"], {("GET", CONNECTION): (200, USER)},
+                           stdin=io.StringIO("pat\n"), env={"AZURE_DEVOPS_EXT_PAT": "other"})
+        self.assertIn("AZURE_DEVOPS_EXT_PAT", err)
+        self.assertNotIn("other", err.replace("AZURE_DEVOPS_EXT_PAT", ""))
+
+    def test_me_names_the_token_variable(self):
+        _, out, _, _ = run(["me"], {("GET", CONNECTION): (200, USER)},
+                           env={"AZDO_ORG": "example", "AZURE_DEVOPS_EXT_PAT": "pat"})
+        self.assertIn("AZURE_DEVOPS_EXT_PAT", out)
 
     def test_read_only_blocks_session_commands(self):
         ctx = context.CLIContext(read_only=True)

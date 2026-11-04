@@ -30,13 +30,17 @@ def cmd_login(azdo, args):
         raise ToolError("A personal access token is needed")
     user = azdo.check_token(token)
     azdo.save_credentials(token)
+    variable = client.token_variable()
+    if variable:
+        info(output.err.yellow(f"{variable} is set and wins over the token saved now; unset it to use this one."))
     name = user.get("providerDisplayName") or user.get("id")
     info(output.err.green("✓ ") + f"Logged in to {azdo.url} as {output.err.bold(str(name))}")
 
 
 def cmd_logout(azdo, args):
-    azdo.credentials_file.unlink(missing_ok=True)
-    info(output.err.green("✓ ") + "Logged out.")
+    azdo.forget_token()
+    info(output.err.green("✓ ") + "Logged out; the organization is kept. The token stays valid until it expires or "
+         "you revoke it in Azure DevOps.")
 
 
 def cmd_token(azdo, args):
@@ -62,7 +66,7 @@ def cmd_me(azdo, args):
         return
     print(f"{output.out.bold(str(user.get('providerDisplayName') or user.get('id')))}"
           + (f" ({output.out.cyan(email)})" if email else "") + f" on {azdo.url}")
-    print(output.out.dim("Token from the environment" if credentials_file is None else f"Credentials: {credentials_file}"))
+    print(output.out.dim(f"Token from {creds['env']}" if credentials_file is None else f"Credentials: {credentials_file}"))
 
 
 def build_parser(prog):
@@ -105,7 +109,9 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"),
+                   help="delete the saved token, keep the organization (the token stays valid until revoked)"
+                   ).set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", aliases=context.command_aliases("token"), help="print the personal access token").set_defaults(func=cmd_token)
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
