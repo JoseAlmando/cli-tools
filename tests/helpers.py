@@ -13,9 +13,10 @@ class TempConf(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         env = {k: v for k, v in os.environ.items()
-               if not k.startswith(("TAIGA_", "GITEA_", "GITHUB_", "GH_", "JIRA_", "CLT_"))}
+               if not k.startswith(("TAIGA_", "GITEA_", "GITHUB_", "GH_", "JIRA_", "AZDO_", "AZURE_DEVOPS_", "CLT_"))}
         env.update(TAIGA_CONF_DIR=os.path.join(self.tmp.name, "taiga"), GITEA_CONF_DIR=os.path.join(self.tmp.name, "gitea"),
-                   GITHUB_CONF_DIR=os.path.join(self.tmp.name, "github"), JIRA_CONF_DIR=os.path.join(self.tmp.name, "jira"))
+                   GITHUB_CONF_DIR=os.path.join(self.tmp.name, "github"), JIRA_CONF_DIR=os.path.join(self.tmp.name, "jira"),
+                   AZDO_CONF_DIR=os.path.join(self.tmp.name, "azdo"))
         patcher = mock.patch.dict(os.environ, env, clear=True)
         patcher.start()
         self.addCleanup(patcher.stop)
