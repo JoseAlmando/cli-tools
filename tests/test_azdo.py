@@ -1,10 +1,12 @@
 import base64
+import contextlib
+import io
 import json
 import os
 import urllib.parse
 from unittest import mock
 
-from cli_tools.core import credentials, http
+from cli_tools.core import context, credentials, errors, http
 from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 from tests.helpers import TempConf
 
@@ -178,3 +180,100 @@ class AzdoPagingTests(TempConf):
         self.assertEqual(c.items_key({"value": []}), "value")
         self.assertIsNone(c.items_key({"id": 1}))
         self.assertIsNone(c.items_key([1]))
+
+
+CONNECTION = f"{ORG}/_apis/connectionData?api-version=7.1-preview"
+USER = {"authenticatedUser": {"id": "u-1", "providerDisplayName": "Bot User",
+                              "properties": {"Account": {"$type": "System.String", "$value": "me@example.com"}}}}
+
+
+class FakeTerminal(io.StringIO):
+    def isatty(self):
+        return True
+
+
+def run(argv, routes, stdin="", env=None, ctx=None):
+    from cli_tools.tools.azdo import cli
+    out, err = io.StringIO(), io.StringIO()
+    with fake(routes) as send, mock.patch.dict(os.environ, env or {}), mock.patch("sys.stdin", stdin), \
+            contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = cli.main(argv, ctx=ctx)
+    return code, out.getvalue(), err.getvalue(), send.requests
+
+
+class AzdoCliTests(TempConf):
+    def test_login_with_token_stdin_checks_and_saves(self):
+        code, out, err, _ = run(["login", "--org", "example", "--token-stdin"], {("GET", CONNECTION): (200, USER)},
+                                stdin=io.StringIO("pat\n"))
+        self.assertEqual((code, out), (None, ""))
+        saved = credentials.read_json_file(client().AzureDevOps("example").credentials_file)
+        self.assertEqual(saved, {"url": ORG, "token": "pat"})
+        self.assertIn("Bot User", err)
+        self.assertNotIn("pat", err)
+
+    def test_login_rejected_saves_nothing(self):
+        with self.assertRaises(HttpError):
+            run(["login", "--org", "example", "--token-stdin"],
+                {("GET", CONNECTION): HttpError(401, "Unauthorized")}, stdin=io.StringIO("pat\n"))
+        self.assertFalse(client().AzureDevOps("example").credentials_file.exists())
+
+    def test_login_without_terminal_fails_at_once(self):
+        with self.assertRaisesRegex(ToolError, "needs a person"):
+            run(["login", "--org", "example"], {}, stdin=io.StringIO(""))
+
+    def test_create_token_prints_page_and_scopes(self):
+        from cli_tools.tools.azdo import cli
+        opened = []
+        with mock.patch.object(cli.webbrowser, "open", opened.append), \
+                mock.patch.object(cli.getpass, "getpass", lambda prompt: "pat"):
+            _, _, err, _ = run(["login", "--org", "example", "--create-token", "--no-browser"],
+                               {("GET", CONNECTION): (200, USER)}, stdin=FakeTerminal(""))
+        self.assertIn(f"{ORG}/_usersSettings/tokens", err)
+        for scope in client().TOKEN_SCOPES:
+            self.assertIn(scope, err)
+        self.assertEqual(opened, [])
+
+    def test_me_json_shape(self):
+        ctx = context.CLIContext(json_mode=True)
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        _, out, _, _ = run(["me"], {("GET", CONNECTION): (200, USER)}, env=env, ctx=ctx)
+        self.assertEqual(json.loads(out), {"id": "u-1", "username": "me@example.com", "full_name": "Bot User",
+                                           "email": "me@example.com", "url": ORG, "credentials_file": None})
+        bare = {"authenticatedUser": {"id": "u-2", "providerDisplayName": "No Mail"}}
+        _, out, _, _ = run(["me"], {("GET", CONNECTION): (200, bare)}, env=env, ctx=ctx)
+        self.assertEqual((json.loads(out)["email"], json.loads(out)["username"]), (None, None))
+
+    def test_api_get_all_fields(self):
+        base = f"{ORG}/Demo/_apis/git/repositories/web/pullrequests?$top=2&api-version=7.1"
+        routes = {("GET", base): (200, {"count": 2, "value": [{"pullRequestId": 1, "x": 0},
+                                                              {"pullRequestId": 2, "x": 0}]}),
+                  ("GET", f"{ORG}/Demo/_apis/git/repositories/web/pullrequests?%24top=2&%24skip=2&api-version=7.1"):
+                      (200, {"count": 1, "value": [{"pullRequestId": 3, "x": 0}]})}
+        _, out, _, sent = run(["GET", "Demo/_apis/git/repositories/web/pullrequests?$top=2", "--all",
+                               "--fields", "pullRequestId"], routes, env={"AZDO_ORG": "example", "AZDO_TOKEN": "pat"})
+        self.assertEqual(json.loads(out), {"count": 3, "value": [{"pullRequestId": 1}, {"pullRequestId": 2},
+                                                                 {"pullRequestId": 3}]})
+        self.assertEqual(len(sent), 2)
+
+    def test_api_patch_work_item_sends_json_patch(self):
+        url = f"{ORG}/_apis/wit/workitems/42?api-version=7.1"
+        body = '[{"op": "add", "path": "/fields/System.State", "value": "Active"}]'
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        _, _, _, sent = run(["PATCH", "_apis/wit/workitems/42", "-d", body], {("PATCH", url): (200, {"id": 42})},
+                            env=env)
+        self.assertEqual(sent[0].get_header("Content-type"), "application/json-patch+json")
+        with self.assertRaises(errors.ReadOnlyError):
+            run(["PATCH", "_apis/wit/workitems/42", "-d", body], {}, env=env, ctx=context.CLIContext(read_only=True))
+
+    def test_logout_and_token(self):
+        client().AzureDevOps("example").save_credentials("pat")
+        _, out, _, _ = run(["token"], {}, env={"AZDO_ORG": "example"})
+        self.assertEqual(out, "pat\n")
+        run(["logout"], {})
+        self.assertFalse(client().AzureDevOps("example").credentials_file.exists())
+
+    def test_read_only_blocks_session_commands(self):
+        ctx = context.CLIContext(read_only=True)
+        for argv in (["login", "--org", "example"], ["logout"], ["token"]):
+            with self.subTest(argv=argv), self.assertRaises(errors.ReadOnlyError):
+                run(argv, {}, env={"AZDO_ORG": "example"}, ctx=ctx)

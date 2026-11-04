@@ -25,6 +25,7 @@ TAIGA = "https://taiga.example.com"
 GITEA = "https://gitea.example.com"
 GITHUB = "https://api.github.com"
 JIRA = "https://example.atlassian.net"
+AZDO = "https://dev.azure.com/example"
 
 CLT_HELP = """\
 usage: clt TOOL [arguments]
@@ -34,6 +35,7 @@ tools:
   gitea, gt    client for the Gitea API, with OAuth2 login in the browser
   github, gh   client for the GitHub API, with a personal access token
   jira, j      client for the Jira Cloud API, with an API token
+  azdo         client for the Azure DevOps Services API, with a personal access token
   release      bump the version, update the changelog, tag and publish a release
   update       install the latest release of clt, or a given version
 
@@ -156,6 +158,7 @@ class HelpAndVersionTests(TempConf):
     def test_each_command_names_itself_in_its_usage(self):
         cases = [("clt", ["taiga"], "usage: clt taiga "), ("clt", ["gitea"], "usage: clt gitea "),
                  ("clt", ["github"], "usage: clt github "), ("clt", ["jira"], "usage: clt jira "),
+                 ("clt", ["azdo"], "usage: clt azdo "),
                  ("clt", ["release"], "usage: clt release "),
                  ("clt", ["update"], "usage: clt update "), ("clt", ["t"], "usage: clt taiga "),
                  ("clt", ["gt"], "usage: clt gitea "), ("clt", ["gh"], "usage: clt github "),
@@ -170,7 +173,8 @@ class HelpAndVersionTests(TempConf):
         for script, argv, commands in (("clt", ["taiga"], "login refresh logout me token api"),
                                        ("clt", ["gitea"], "login refresh logout me token api"),
                                        ("clt", ["github"], "login refresh logout me token protect api"),
-                                       ("clt", ["jira"], "login logout me token issue api")):
+                                       ("clt", ["jira"], "login logout me token issue api"),
+                                       ("clt", ["azdo"], "login logout me token api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():
@@ -220,20 +224,23 @@ class ExitCodeTests(TempConf):
                 self.assertEqual(run_process(script, *argv)[0], 2)
 
     def test_not_logged_in(self):
-        for script, argv, env in (("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}), ("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}),
-                                  ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}), ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}),
-                                  ("clt", ["github", "me"], {}), ("clt", ["jira", "me"], {"JIRA_URL": JIRA})):
+        for script, argv, env in (("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}),
+                                  ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}),
+                                  ("clt", ["github", "me"], {}), ("clt", ["jira", "me"], {"JIRA_URL": JIRA}),
+                                  ("clt", ["azdo", "me"], {"AZDO_ORG": "example"})):
             with self.subTest(script=script, argv=argv):
                 code, out, err = run_process(script, *argv, env=env)
                 self.assertEqual((code, out), (3, ""))
                 self.assertIn("Not logged in", err)
 
     def test_read_only_blocks_writes_and_session_commands(self):
-        env = {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "secret-taiga", "GITEA_URL": GITEA, "GITEA_TOKEN": "secret-gitea"}
+        env = {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "secret-taiga", "GITEA_URL": GITEA, "GITEA_TOKEN": "secret-gitea",
+               "AZDO_ORG": "example", "AZDO_TOKEN": "secret-azdo"}
         for script, argv in (("clt", ["taiga", "--read-only", "POST", "tasks", "-d", "{}"]),
                              ("clt", ["taiga", "--read-only", "DELETE", "tasks/1"]),
                              ("clt", ["gitea", "--read-only", "token"]), ("clt", ["gitea", "--read-only", "logout"]),
-                             ("clt", ["github", "--read-only", "token"])):
+                             ("clt", ["github", "--read-only", "token"]), ("clt", ["azdo", "--read-only", "token"]),
+                             ("clt", ["azdo", "--read-only", "PATCH", "_apis/wit/workitems/1", "-d", "[]"])):
             with self.subTest(argv=argv):
                 code, out, err = run_process(script, *argv, env=env)
                 self.assertEqual((code, out), (4, ""))
@@ -400,7 +407,7 @@ class SessionTests(TempConf):
         home = Path(self.tmp.name) / "home"
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         with mock.patch.dict(os.environ, env):
-            for name in ("TAIGA_CONF_DIR", "GITEA_CONF_DIR", "GITHUB_CONF_DIR", "JIRA_CONF_DIR"):
+            for name in ("TAIGA_CONF_DIR", "GITEA_CONF_DIR", "GITHUB_CONF_DIR", "JIRA_CONF_DIR", "AZDO_CONF_DIR"):
                 os.environ.pop(name)
             self.assertEqual(Path.home(), home)  # the real ~/.config is never touched
             write_json(home / ".config" / "taiga" / "credentials.json", {"url": TAIGA, "auth_token": "t"})
@@ -408,10 +415,13 @@ class SessionTests(TempConf):
             write_json(home / ".config" / "github" / "credentials.json", {"token": "t"})
             write_json(home / ".config" / "jira" / "credentials.json",
                        {"url": JIRA, "email": "e@example.com", "token": "t", "mode": "site", "cloud_id": None})
+            write_json(home / ".config" / "azdo" / "credentials.json", {"url": AZDO, "token": "t"})
             cases = [("clt", ["taiga"], {("GET", f"{TAIGA}/api/v1/users/me"): (200, '{"id": 1}', {})}),
                      ("clt", ["gitea"], {("GET", f"{GITEA}/api/v1/user"): (200, '{"id": 1}', {})}),
                      ("clt", ["github"], {("GET", f"{GITHUB}/user"): (200, '{"id": 1}', {})}),
-                     ("clt", ["jira"], {("GET", f"{JIRA}/rest/api/3/myself"): (200, '{"accountId": "a"}', {})})]
+                     ("clt", ["jira"], {("GET", f"{JIRA}/rest/api/3/myself"): (200, '{"accountId": "a"}', {})}),
+                     ("clt", ["azdo"], {("GET", f"{AZDO}/_apis/connectionData?api-version=7.1-preview"):
+                                        (200, '{"authenticatedUser": {"id": "a"}}', {})})]
             for script, argv, routes in cases:
                 tool = argv[0] if argv else script
                 with self.subTest(tool=tool):
