@@ -1,9 +1,9 @@
 ---
 name: clt
-description: Use the clt command-line tools (clt taiga, clt gitea, clt github) to read and change Taiga projects (user stories, issues, tasks) and Gitea or GitHub repositories (pull requests, branches, issues, releases) through their REST APIs. Use it whenever a task needs data from or changes in Taiga, Gitea or GitHub, instead of curl, gh or a browser.
+description: Use the clt command-line tools (clt taiga, clt gitea, clt github, clt jira) to read and change Taiga projects (user stories, issues, tasks), Gitea or GitHub repositories (pull requests, branches, issues, releases) and Jira Cloud tickets (read, search, move between states, comment) through their REST APIs. Use it whenever a task needs data from or changes in Taiga, Gitea, GitHub or Jira, instead of curl, gh, an MCP server or a browser.
 ---
 
-# clt: Taiga, Gitea and GitHub from the command line
+# clt: Taiga, Gitea, GitHub and Jira from the command line
 
 `clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. The Taiga and Gitea tools are also installed as `taiga` and `gitea`.
 
@@ -76,6 +76,10 @@ clt github --json --read-only me
 clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title,head.ref,base.ref --all
 clt github --json --read-only GET "repos/<owner>/<repo>/releases" --fields tag_name,name,html_url --max-items 10
 ```
+
+## Jira
+
+`clt jira` calls Jira Cloud (`https://<site>.atlassian.net/rest/api/3/`, or `api.atlassian.com` for tokens with scopes) with the same flags as the other tools. **Read [`references/jira.md`](references/jira.md) before any Jira call**: it has the exact recipes (JQL search, transitions, comments in ADF, assignee) and what agents get wrong. To read a ticket, use `clt jira --json --read-only issue PROJ-123`, not the raw issue JSON.
 
 ## Releases
 

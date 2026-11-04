@@ -21,8 +21,10 @@ src/cli_tools/
 ├── tools/               the API clients, one package each
 │   ├── taiga/           client.py (server, session, token renewal) and cli.py (commands, main, run)
 │   ├── gitea/           client.py, cli.py, and auth.py (OAuth2 + PKCE login in the browser)
-│   └── github/          client.py (session, renewal of expiring tokens), cli.py, and auth.py (device flow, token refresh
-│                        and the pre-filled token page; only as clt github)
+│   ├── github/          client.py (session, renewal of expiring tokens), cli.py, and auth.py (device flow, token refresh
+│   │                    and the pre-filled token page; only as clt github)
+│   └── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
+│                        to plain text), cli.py (login, me, issue, api; only as clt jira)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
     └── update.py        clt update
@@ -56,15 +58,15 @@ Dependencies go one way:
 | `output` | `info()` for messages (stderr); `output.out` and `output.err` for colors. Use them as attributes of the module: `setup_streams()` replaces them when a run starts. |
 | `http` | `resolve_url(cli_url, env_url, credentials_file, prog, var)` picks the server (login's `--url`, then the environment, then the last session) and accepts only `https://server`. `api_url(base, path, prefix)` accepts only paths relative to the API, so the token never leaves that server. `json_request(method, url, body, token, cacert, headers)` sends it without following redirects. `parse_json(raw, what)` fails with a clear message. |
 | `credentials` | `write_private_json(path, data)` and `read_json_file(path)` for the saved session. |
-| `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. |
+| `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page, items_key, join)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. A tool passes `next_page(headers, body, path)` when the next page is in the body, `items_key(data)` when lists come inside an object (`{"issues": [...]}`) so `--fields` and `--max-items` reach them, and `join(pages)` to merge pages into that object. `set_query(path, params)` sets or removes query parameters of a relative path. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. |
 | `runner` | `run(main)`, for each console script. |
 
 ## Adding a tool
 
-Say the new service is Jira.
+Say the new service is Linear.
 
-1. **The client**, `src/cli_tools/tools/jira/client.py`: a class that knows the server (`http.resolve_url`), where its credentials live (an environment variable such as `JIRA_CONF_DIR`, by default `~/.config/jira`), and how to send a request (`http.json_request(method, http.api_url(self.url, path, prefix=...), body, token, self.cacert)`). It loads and saves the session with `credentials`, raises `NotLoggedIn` when there is none, refuses a saved session for another server, and renews the token if the service allows it. Give it a `call(method, path, body)` that returns `(status, body, headers)`, renewing and retrying once on a 401 when it can.
-2. **The commands**, `src/cli_tools/tools/jira/cli.py`: one function per command, `cmd_x(client, args)`, reading the context from `args.ctx`; `build_parser(prog)`, with the `api` command from `api.add_api_parser(sub, prog, "<example path>", lambda c, args: api.run_api(args, c.call, args.ctx))`; and
+1. **The client**, `src/cli_tools/tools/linear/client.py`: a class that knows the server (`http.resolve_url`), where its credentials live (an environment variable such as `LINEAR_CONF_DIR`, by default `~/.config/linear`), and how to send a request (`http.json_request(method, http.api_url(self.url, path, prefix=...), body, token, self.cacert)`). It loads and saves the session with `credentials`, raises `NotLoggedIn` when there is none, refuses a saved session for another server, and renews the token if the service allows it. Give it a `call(method, path, body)` that returns `(status, body, headers)`, renewing and retrying once on a 401 when it can.
+2. **The commands**, `src/cli_tools/tools/linear/cli.py`: one function per command, `cmd_x(client, args)`, reading the context from `args.ctx`; `build_parser(prog)`, with the `api` command from `api.add_api_parser(sub, prog, "<example path>", lambda c, args: api.run_api(args, c.call, args.ctx))`; and
 
     ```python
     def main(argv, ctx=None, prog=PROG):
@@ -76,13 +78,13 @@ Say the new service is Jira.
             return 2
         ctx.check_session_command(args.command)
         args.ctx = ctx
-        return args.func(Jira(), args)
+        return args.func(Linear(), args)
     ```
 
 3. **Tool-specific authentication** (a browser flow, a callback server, a signing scheme) goes in the tool's own package, as `auth.py` does for Gitea. Keep `core` free of it.
-4. **Register it**: one line in `src/cli_tools/registry.py`, `("jira", "cli_tools.tools.jira.cli", "client for the Jira API")`. `clt jira ...` and `clt --help` pick it up; no other module changes.
-5. **Optionally, a standalone command**: add `def run(): return runner.run(main)` to `cli.py` and a line under `[project.scripts]` in `pyproject.toml`, `jira = "cli_tools.tools.jira.cli:run"`. Leave it out when the name could clash with another program (that is why GitHub is only `clt github`).
-6. **Tests** in `tests/test_jira.py`, with no network: patch `cli_tools.core.http.send`, or a client's `request`/`call`, and use `tests.helpers.TempConf` for a private credentials folder. `tests/test_contracts.py` shows how to drive the real entry points against a fake server.
+4. **Register it**: one line in `src/cli_tools/registry.py`, `("linear", "cli_tools.tools.linear.cli", "client for the Linear API")`. `clt linear ...` and `clt --help` pick it up; no other module changes.
+5. **Optionally, a standalone command**: add `def run(): return runner.run(main)` to `cli.py` and a line under `[project.scripts]` in `pyproject.toml`, `linear = "cli_tools.tools.linear.cli:run"`. Leave it out when the name could clash with another program (that is why GitHub is only `clt github`).
+6. **Tests** in `tests/test_linear.py`, with no network: patch `cli_tools.core.http.send`, or a client's `request`/`call`, and use `tests.helpers.TempConf` for a private credentials folder. `tests/test_contracts.py` shows how to drive the real entry points against a fake server.
 7. **Docs**: the README tables, and `skills/clt/SKILL.md` if agents should use it.
 
 ## Adding a clt command that is not an API client
