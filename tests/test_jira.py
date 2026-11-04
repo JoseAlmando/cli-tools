@@ -137,6 +137,28 @@ class JiraClientTests(TempConf):
                 self.assertRaisesRegex(ToolError, "JIRA_CLOUD_ID"):
             Jira().call("GET", "myself", None)
 
+    def test_tenant_info_unusable_says_the_token_was_rejected(self):
+        routes = {("GET", SITE_API + "myself"): unauthorized(), ("GET", TENANT): HttpError(404, "Not Found")}
+        with fake(routes), self.assertRaisesRegex(ToolError, "rejected the token on the site"):
+            Jira(SITE).detect("me@example.com", "tok")
+
+    def test_dot_segments_cannot_leave_the_api(self):
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
+        for path in ("../../../wiki/rest/api/space", "issue/../../x", "%2e%2e/x", "issue/%2E%2E/x", "./myself",
+                     "issue/A-1/..?x=1"):
+            with self.subTest(path=path), mock.patch.dict(os.environ, env), fake({}) as send, \
+                    self.assertRaises(ToolError):
+                Jira().call("GET", path, None)
+            self.assertEqual(send.requests, [])
+
+    def test_the_query_typed_by_the_user_is_encoded(self):
+        env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
+        path = 'search/jql?jql=assignee=currentUser() AND summary ~ "a#b"&fields=key'
+        expected = SITE_API + "search/jql?jql=assignee=currentUser()%20AND%20summary%20~%20%22a%23b%22&fields=key"
+        with mock.patch.dict(os.environ, env), fake({("GET", expected): (200, {"issues": []})}) as send:
+            Jira().call("GET", path, None)
+        self.assertEqual(send.requests[0].full_url, expected)
+
     def test_paths_cannot_leave_the_api(self):
         env = {"JIRA_URL": SITE, "JIRA_EMAIL": "me@example.com", "JIRA_TOKEN": "tok"}
         with mock.patch.dict(os.environ, env), fake({}) as send, self.assertRaises(ToolError):
@@ -234,6 +256,16 @@ class JiraPagingTests(TempConf):
         _, out, _, sent = run(["GET", "project/search", "--all"], routes, env={"JIRA_URL": SITE})
         self.assertEqual(json.loads(out), {"total": 3, "values": [{"id": 1}, {"id": 2}, {"id": 3}]})
         self.assertEqual(len(sent), 2)
+
+    def test_the_recipes_in_the_reference_run(self):
+        recipe = ("search/jql?jql=assignee=currentUser() AND statusCategory!=Done ORDER BY updated DESC"
+                  "&fields=key,summary,status")
+        url = SITE_API + ("search/jql?jql=assignee=currentUser()%20AND%20statusCategory!=Done%20ORDER%20BY%20updated"
+                          "%20DESC&fields=key,summary,status")
+        code, out, _, sent = run(["GET", recipe, "--fields", "key", "--all"],
+                                 {("GET", url): page({"issues": [{"key": "A-1"}], "isLast": True})},
+                                 env={"JIRA_URL": SITE})
+        self.assertEqual(json.loads(out), {"issues": [{"key": "A-1"}], "isLast": True})
 
     def test_fields_reach_issues(self):
         body = {"issues": [{"key": "A-1", "id": "1", "fields": {"status": {"name": "Done"}, "summary": "x"}}]}
