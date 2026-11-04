@@ -44,6 +44,15 @@ class NextPageTests(unittest.TestCase):
         self.assertIsNone(api.next_page_path(other, api_root="https://api.github.com/"))
 
 
+class SetQueryTests(unittest.TestCase):
+    def test_adds_replaces_and_removes(self):
+        self.assertEqual(api.set_query("search/jql?jql=a%3D1&fields=key", {"nextPageToken": "t 1"}),
+                         "search/jql?jql=a%3D1&fields=key&nextPageToken=t+1")
+        self.assertEqual(api.set_query("x?startAt=0&a=b", {"startAt": 50}), "x?startAt=50&a=b")
+        self.assertEqual(api.set_query("x?a=b&c=d", {"a": None}), "x?c=d")
+        self.assertEqual(api.set_query("x", {"a": 1}), "x?a=1")
+
+
 class JsonRequestTests(unittest.TestCase):
     def test_extra_headers_replace_the_defaults(self):
         with mock.patch.object(http, "send", return_value=(200, "{}", {})) as send:
