@@ -29,7 +29,7 @@ clt azdo --json --read-only GET "<project>/_apis/wit/workitemtypes" --fields nam
 clt azdo --json --read-only GET '<project>/_apis/wit/workitemtypes/Task/fields?$expand=allowedValues' --fields referenceName,alwaysRequired,allowedValues
 ```
 
-Before creating, check that the type is not disabled and which fields it requires (`alwaysRequired`); processes often add `Custom.*` ones. A failed create lists them in `body.customProperties.RuleValidationErrors`.
+Before creating, check the type is not disabled and which fields it requires (`alwaysRequired`, often `Custom.*`); a failed create lists them in `body.customProperties.RuleValidationErrors`.
 
 Query with WIQL. It is a read sent as `POST`, so it cannot run under `--read-only`; it returns only ids, read them with the second recipe above. `wiql.json`:
 
@@ -42,7 +42,7 @@ clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --dry-run
 clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --fields workItems
 ```
 
-If it returns exactly `$top` ids there are more: raise `$top`. The ids come back in WIQL order; reading them with `ids=` returns them sorted by id.
+If it returns exactly `$top` ids there are more: raise `$top`.
 
 Create a task under a parent. The body is a JSON Patch list; `task.json`:
 
@@ -103,8 +103,6 @@ Create one, linked to work items. `pr.json` (the description is Markdown):
 clt azdo --json POST "<project>/_apis/git/repositories/<repo>/pullrequests" -d @pr.json --dry-run
 clt azdo --json POST "<project>/_apis/git/repositories/<repo>/pullrequests" -d @pr.json --fields pullRequestId,status
 ```
-
-The page is `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<pr>`.
 
 Comment: a new thread (Markdown). For a comment on a line, add `"threadContext": {"filePath": "/src/app.py", "rightFileStart": {"line": 10, "offset": 1}, "rightFileEnd": {"line": 10, "offset": 1}}`.
 
