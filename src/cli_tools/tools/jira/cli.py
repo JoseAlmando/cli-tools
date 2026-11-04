@@ -2,12 +2,13 @@ import argparse
 import getpass
 import json
 import sys
+import urllib.parse
 import webbrowser
 
-from cli_tools.core import api, context, output
+from cli_tools.core import api, context, http, output
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
-from cli_tools.tools.jira import client
+from cli_tools.tools.jira import adf, client
 from cli_tools.tools.jira.client import API_PREFIX, SCOPES, TOKEN_PAGE, Jira
 
 
@@ -67,11 +68,101 @@ def cmd_me(jira, args):
     print(output.out.dim("Token from the environment" if credentials_file is None else f"Credentials: {credentials_file}"))
 
 
+ISSUE_FIELDS = ("summary,status,issuetype,priority,assignee,reporter,labels,parent,description,subtasks,"
+                "issuelinks,comment")
+
+
+def _name(value, key="name"):
+    return value.get(key) if isinstance(value, dict) else None
+
+
+def _brief(issue):
+    fields = issue.get("fields") or {}
+    return {"key": issue.get("key"), "summary": fields.get("summary"), "status": _name(fields.get("status"))}
+
+
+def _link(link):
+    if link.get("outwardIssue"):
+        return {"type": _name(link.get("type"), "outward"), **_brief(link["outwardIssue"])}
+    return {"type": _name(link.get("type"), "inward"), **_brief(link.get("inwardIssue") or {})}
+
+
+def _comment(comment):
+    return {"author": _name(comment.get("author"), "displayName"), "created": comment.get("created"),
+            "body": adf.to_text(comment.get("body"))}
+
+
+def _comments(jira, key, field, wanted):
+    if wanted <= 0:
+        return []
+    field = field if isinstance(field, dict) else {}
+    found = field.get("comments") or []
+    total = field.get("total") if isinstance(field.get("total"), int) else len(found)
+    if total > len(found):
+        _, raw, _ = jira.call("GET", f"issue/{key}/comment?startAt={max(total - wanted, 0)}&maxResults={wanted}", None)
+        found = http.parse_json(raw, "Getting the comments").get("comments") or []
+    return [_comment(c) for c in found[-wanted:] if isinstance(c, dict)]
+
+
+def issue_summary(jira, key, wanted):
+    path_key = urllib.parse.quote(key, safe="")
+    _, raw, _ = jira.call("GET", f"issue/{path_key}?fields={ISSUE_FIELDS}", None)
+    issue = http.parse_json(raw, "Getting the issue")
+    if not isinstance(issue, dict):
+        raise ToolError("Unexpected response from issue")
+    fields = issue.get("fields") or {}
+    description = fields.get("description")
+    return {"key": issue.get("key"), "summary": fields.get("summary"), "type": _name(fields.get("issuetype")),
+            "status": _name(fields.get("status")), "priority": _name(fields.get("priority")),
+            "assignee": _name(fields.get("assignee"), "displayName"),
+            "reporter": _name(fields.get("reporter"), "displayName"), "labels": fields.get("labels") or [],
+            "parent": _name(fields.get("parent"), "key"),
+            "description": None if description is None else adf.to_text(description),
+            "subtasks": [_brief(s) for s in fields.get("subtasks") or [] if isinstance(s, dict)],
+            "links": [_link(link) for link in fields.get("issuelinks") or [] if isinstance(link, dict)],
+            "comments": _comments(jira, path_key, fields.get("comment"), wanted),
+            "url": f"{jira.url}/browse/{issue.get('key')}"}
+
+
+def print_issue(summary):
+    out = output.out
+    print(f"{out.bold(summary['key'])}  {summary['summary']}")
+    print(" · ".join(str(v) for v in (summary["type"], summary["status"], summary["priority"]) if v))
+    for label, value in (("Assignee", summary["assignee"]), ("Reporter", summary["reporter"]),
+                         ("Parent", summary["parent"]), ("Labels", ", ".join(summary["labels"]))):
+        if value:
+            print(f"{out.dim(label + ':')} {value}")
+    print(out.dim(summary["url"]))
+    if summary["description"]:
+        print()
+        print(summary["description"])
+    if summary["subtasks"]:
+        print("\n" + out.bold("Subtasks"))
+        for item in summary["subtasks"]:
+            print(f"  {item['key']}  {item['summary']}  [{item['status']}]")
+    if summary["links"]:
+        print("\n" + out.bold("Links"))
+        for item in summary["links"]:
+            print(f"  {item['type']} {item['key']}  {item['summary']}  [{item['status']}]")
+    for item in summary["comments"]:
+        print("\n" + out.bold(f"{item['author']}, {item['created']}"))
+        print(item["body"])
+
+
+def cmd_issue(jira, args):
+    summary = issue_summary(jira, args.key, args.comments)
+    if args.ctx.json_mode:
+        print(json.dumps(summary, ensure_ascii=False))
+    else:
+        print_issue(summary)
+
+
 def build_parser(prog):
     epilog = f"""\
 examples:
   {prog} login --url https://<site>.atlassian.net --create-token
   {prog} me
+  {prog} issue <KEY>                             # summary, description and comments as text
   {prog} GET "search/jql?jql=assignee=currentUser() AND statusCategory!=Done&fields=key,summary,status" --all
   {prog} GET issue/<KEY>/transitions --fields transitions
   {prog} POST issue/<KEY>/transitions -d '{{"transition": {{"id": "31"}}}}' --dry-run
@@ -114,6 +205,10 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", help="print the API token").set_defaults(func=cmd_token)
+    p = sub.add_parser("issue", help="one issue as a short summary, with its description and comments as text")
+    p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
+    p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
+    p.set_defaults(func=cmd_issue)
     api.add_api_parser(sub, prog, "issue/<KEY>",
                        lambda j, args: api.run_api(args, j.call, args.ctx, client.next_page, client.items_key,
                                                    client.join), api_prefix=API_PREFIX)
