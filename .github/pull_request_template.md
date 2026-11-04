@@ -9,4 +9,4 @@
 - [ ] Branch and commits follow the conventions in [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [ ] Still standard library only, and nothing that breaks Windows
 - [ ] No tokens, passwords or private server names anywhere in the change
-- [ ] README, help text or `skills/clt/SKILL.md` updated if users or agents see something different
+- [ ] README, help text or the skill (`src/cli_tools/skill/`) updated if users or agents see something different
