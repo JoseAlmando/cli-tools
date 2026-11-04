@@ -1,11 +1,11 @@
 # Instructions for AI coding agents
 
-This file is for agents that **develop** clt. To **use** clt (call Taiga, Gitea, GitHub or Jira from a task), read
+This file is for agents that **develop** clt. To **use** clt (call Taiga, Gitea, GitHub, Jira or Azure DevOps from a task), read
 [`skills/clt/SKILL.md`](skills/clt/SKILL.md) instead.
 
 ## The project
 
-clt is a command-line client for the Taiga, Gitea, GitHub and Jira Cloud APIs, plus `clt release` (version, changelog, tag,
+clt is a command-line client for the Taiga, Gitea, GitHub, Jira Cloud and Azure DevOps Services APIs, plus `clt release` (version, changelog, tag,
 publish) and `clt update` (self-update). It is a Python package with **no runtime dependencies**.
 
 - Layout and responsibilities: [`docs/architecture.md`](docs/architecture.md). Read it before changing code.
