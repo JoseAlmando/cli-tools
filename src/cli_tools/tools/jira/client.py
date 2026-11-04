@@ -2,10 +2,11 @@ import base64
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from cli_tools.core import credentials, http, output
+from cli_tools.core import api, credentials, http, output
 from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 
 PROG = "clt jira"
@@ -110,3 +111,45 @@ class Jira:
                 raise ToolError("Jira rejected JIRA_EMAIL and JIRA_TOKEN on the site; if the token has scopes, "
                                 "set JIRA_CLOUD_ID too") from None
             raise
+
+
+ITEM_KEYS = ("issues", "values", "comments", "worklogs")
+PAGING_KEYS = ("nextPageToken", "isLast", "startAt", "maxResults")
+
+
+def items_key(data):
+    if not isinstance(data, dict):
+        return None
+    return next((key for key in ITEM_KEYS if isinstance(data.get(key), list)), None)
+
+
+def next_page(headers, body=None, path=None):
+    try:
+        data = json.loads(body) if body else None
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("isLast") is True or path is None:
+        return None
+    token = data.get("nextPageToken")
+    if token:
+        sent = dict(urllib.parse.parse_qsl(path.partition("?")[2])).get("nextPageToken")
+        return api.set_query(path, {"nextPageToken": token}) if token != sent else None
+    key = items_key(data)
+    start, total = data.get("startAt"), data.get("total")
+    if key is None or not isinstance(start, int) or not data[key]:
+        return None
+    following = start + len(data[key])
+    if isinstance(total, int) and following >= total:
+        return None
+    if isinstance(data.get("maxResults"), int) and len(data[key]) < data["maxResults"]:
+        return None
+    return api.set_query(path, {"startAt": following})
+
+
+def join(pages):
+    key = items_key(pages[0])
+    if key is None:
+        return [item for page in pages for item in (page if isinstance(page, list) else [page])]
+    joined = {name: value for name, value in pages[0].items() if name not in PAGING_KEYS}
+    joined[key] = [item for page in pages if isinstance(page, dict) for item in page.get(key) or []]
+    return joined

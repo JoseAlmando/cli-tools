@@ -37,8 +37,8 @@ class CltTests(TempConf):
         self.assertIn("usage: clt taiga", buffer.getvalue())
 
     def test_rejects_an_unknown_tool(self):
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(ToolError, "jira"):
-            clt.main(["jira"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(ToolError, "nope"):
+            clt.main(["nope"])
 
 
 class VersionTests(unittest.TestCase):
