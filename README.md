@@ -63,7 +63,7 @@ clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
 clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin updates main and v* tags
 
 clt jira login --url https://<site>.atlassian.net --create-token
-clt jira issue PROJ-123                          # summary, description and comments as text
+clt jira issue PROJ-123                          # summary, description and comments as Markdown
 clt jira GET "search/jql?jql=assignee=currentUser()&fields=key,summary,status" --all
 ```
 

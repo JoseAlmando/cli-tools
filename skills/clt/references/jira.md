@@ -12,7 +12,7 @@ clt jira --json --read-only me
 
 ## Read a ticket
 
-The summary, status, people, links, subtasks, description and last comments, as text:
+The summary, status, people, links, subtasks, description and last comments, as Markdown (bold, strikethrough, lists, tables, links):
 
 ```bash
 clt jira --json --read-only issue PROJ-123
