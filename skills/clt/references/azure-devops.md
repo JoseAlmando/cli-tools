@@ -4,7 +4,7 @@ Azure DevOps Services REST API. Paths are relative to `https://dev.azure.com/<or
 
 ## Session
 
-Logging in needs a person (`clt azdo login --org <org> --create-token`); if a command exits with code 3, ask the user to run it, or to set `AZDO_ORG` and `AZDO_TOKEN`. `me`'s `id` is the reviewer id used to vote.
+Logging in needs a person (`clt azdo login --org <org> --create-token`); if a command exits with code 3, ask the user to run it, or to set `AZDO_ORG` and `AZDO_TOKEN`. `AZDO_TOKEN` and the Azure CLI's `AZURE_DEVOPS_EXT_PAT` win over the saved token; `clt azdo me` (text) says which one is used. `me`'s `id` is the reviewer id used to vote.
 
 ```bash
 clt azdo --json --read-only me
@@ -25,18 +25,24 @@ Field names have dots (`System.Title`), so keep `fields` whole in `--fields`.
 clt azdo --json --read-only GET '_apis/wit/workitems/<id>?$expand=relations' --fields id,fields,relations
 clt azdo --json --read-only GET "_apis/wit/workitems?ids=<id>,<id>&fields=System.Title,System.State,System.AssignedTo" --fields id,fields
 clt azdo --json --read-only GET "<project>/_apis/wit/workitemtypes/Task" --fields name,states
+clt azdo --json --read-only GET "<project>/_apis/wit/workitemtypes" --fields name,isDisabled
+clt azdo --json --read-only GET '<project>/_apis/wit/workitemtypes/Task/fields?$expand=allowedValues' --fields referenceName,alwaysRequired,allowedValues
 ```
+
+Before creating, check that the type is not disabled and which fields it requires (`alwaysRequired`); processes often add `Custom.*` ones. A failed create lists them in `body.customProperties.RuleValidationErrors`.
 
 Query with WIQL. It is a read sent as `POST`, so it cannot run under `--read-only`; it returns only ids, read them with the second recipe above. `wiql.json`:
 
 ```json
-{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me AND [System.State] <> 'Closed' ORDER BY [System.ChangedDate] DESC"}
+{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed') ORDER BY [System.ChangedDate] DESC"}
 ```
 
 ```bash
 clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --dry-run
 clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --fields workItems
 ```
+
+If it returns exactly `$top` ids there are more: raise `$top`. The ids come back in WIQL order; reading them with `ids=` returns them sorted by id.
 
 Create a task under a parent. The body is a JSON Patch list; `task.json`:
 
@@ -65,6 +71,13 @@ Comment (HTML text; this API is a preview one):
 ```bash
 clt azdo --json POST "<project>/_apis/wit/workItems/<id>/comments?api-version=7.1-preview.4" -d '{"text": "Fixed in PR 12."}' --dry-run
 clt azdo --json POST "<project>/_apis/wit/workItems/<id>/comments?api-version=7.1-preview.4" -d '{"text": "Fixed in PR 12."}' --fields id
+```
+
+Delete (to the recycle bin; `?destroy=true` deletes it for good):
+
+```bash
+clt azdo --json DELETE "<project>/_apis/wit/workitems/<id>" --dry-run
+clt azdo --json DELETE "<project>/_apis/wit/workitems/<id>"
 ```
 
 ## Pull requests
@@ -123,5 +136,5 @@ clt azdo --json PATCH "<project>/_apis/git/repositories/<repo>/pullrequests/<pr>
 
 - Creating or updating a work item with a plain JSON object: it takes a JSON Patch list (`[{"op": "add", "path": "/fields/...", "value": ...}]`).
 - Completing a PR without the current `lastMergeSourceCommit.commitId`: it is rejected.
-- Writing work item descriptions and comments in Markdown: they are HTML (PR descriptions and PR comments are Markdown).
+- Writing work item descriptions and comments in Markdown: they are HTML (PR descriptions and PR comments are Markdown). A Bug's text goes in `Microsoft.VSTS.TCM.ReproSteps`, not `System.Description`.
 - Listing PRs without `$top`, or with `$` inside double quotes, where the shell eats it.
