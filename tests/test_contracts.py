@@ -169,7 +169,7 @@ class HelpAndVersionTests(TempConf):
         for script, argv, commands in (("taiga", [], "login refresh logout me token api"),
                                        ("gitea", [], "login refresh logout me token api"),
                                        ("clt", ["github"], "login refresh logout me token protect api"),
-                                       ("clt", ["jira"], "login logout me token api")):
+                                       ("clt", ["jira"], "login logout me token issue api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():

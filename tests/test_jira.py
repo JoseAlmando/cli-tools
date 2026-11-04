@@ -7,7 +7,7 @@ from unittest import mock
 
 from cli_tools.core import context, credentials, errors, http
 from cli_tools.core.errors import HttpError, ToolError
-from cli_tools.tools.jira import cli, client
+from cli_tools.tools.jira import adf, cli, client
 from cli_tools.tools.jira.client import Jira
 from tests.helpers import TempConf
 
@@ -240,6 +240,165 @@ class JiraPagingTests(TempConf):
         _, out, _, _ = run(["GET", "search/jql?jql=x", "--fields", "key,fields.status.name"],
                            {("GET", SITE_API + "search/jql?jql=x"): page(body)}, env={"JIRA_URL": SITE})
         self.assertEqual(json.loads(out), {"issues": [{"key": "A-1", "fields.status.name": "Done"}]})
+
+
+def doc(*content):
+    return {"type": "doc", "version": 1, "content": list(content)}
+
+
+def para(*content):
+    return {"type": "paragraph", "content": list(content)}
+
+
+def text(value, **mark):
+    node = {"type": "text", "text": value}
+    if mark:
+        node["marks"] = [{"type": "link", "attrs": mark}]
+    return node
+
+
+def bullet(*items, ordered=False):
+    return {"type": "orderedList" if ordered else "bulletList",
+            "content": [{"type": "listItem", "content": list(item)} for item in items]}
+
+
+class AdfTests(unittest.TestCase):
+    def test_none_and_empty_doc(self):
+        self.assertEqual(adf.to_text(None), "")
+        self.assertEqual(adf.to_text(doc()), "")
+        self.assertEqual(adf.to_text("plain"), "plain")
+
+    def test_paragraphs_are_separated_by_a_blank_line(self):
+        self.assertEqual(adf.to_text(doc(para(text("A")), para(text("B")))), "A\n\nB")
+
+    def test_heading(self):
+        self.assertEqual(adf.to_text(doc({"type": "heading", "attrs": {"level": 2}, "content": [text("Title")]})),
+                         "## Title")
+
+    def test_lists_and_nesting(self):
+        self.assertEqual(adf.to_text(doc(bullet([para(text("one"))], [para(text("two"))]))), "- one\n- two")
+        self.assertEqual(adf.to_text(doc(bullet([para(text("one"))], [para(text("two"))], ordered=True))),
+                         "1. one\n2. two")
+        nested = bullet([para(text("a")), bullet([para(text("b"))])])
+        self.assertEqual(adf.to_text(doc(nested)), "- a\n  - b")
+
+    def test_code_block(self):
+        node = {"type": "codeBlock", "attrs": {"language": "python"}, "content": [text("x = 1")]}
+        self.assertEqual(adf.to_text(doc(node)), "```python\nx = 1\n```")
+
+    def test_blockquote_and_rule(self):
+        self.assertEqual(adf.to_text(doc({"type": "blockquote", "content": [para(text("q"))]}, {"type": "rule"})),
+                         "> q\n\n---")
+
+    def test_inline_nodes(self):
+        inline = para(text("a"), {"type": "hardBreak"}, text("b "),
+                      {"type": "mention", "attrs": {"text": "@Ana"}}, text(" "),
+                      {"type": "mention", "attrs": {"text": "Luis"}}, text(" "),
+                      text("site", href="https://example.com"), text(" "),
+                      {"type": "inlineCard", "attrs": {"url": "https://example.com/x"}}, text(" "),
+                      {"type": "emoji", "attrs": {"shortName": ":smile:", "text": "😀"}},
+                      {"type": "emoji", "attrs": {"shortName": ":wave:"}})
+        self.assertEqual(adf.to_text(doc(inline)),
+                         "a\nb @Ana @Luis [site](https://example.com) https://example.com/x 😀:wave:")
+
+    def test_table_rows(self):
+        def row(*cells):
+            return {"type": "tableRow", "content": [{"type": "tableCell", "content": [para(text(c))]} for c in cells]}
+        self.assertEqual(adf.to_text(doc({"type": "table", "content": [row("a", "b"), row("c", "d")]})), "a | b\nc | d")
+
+    def test_unknown_nodes_keep_their_text(self):
+        node = doc({"type": "panel", "attrs": {"panelType": "info"}, "content": [para(text("Note"))]},
+                   para({"type": "status", "attrs": {"text": "DONE"}}))
+        result = adf.to_text(node)
+        self.assertIn("Note", result)
+        self.assertIn("DONE", result)
+
+
+ISSUE_FIELDS = "summary,status,issuetype,priority,assignee,reporter,labels,parent,description,subtasks,issuelinks,comment"
+ISSUE_URL = SITE_API + "issue/A-1?fields=" + ISSUE_FIELDS
+
+
+def comment(n):
+    return {"author": {"displayName": f"User {n}"}, "created": f"2026-11-0{n % 9 + 1}T10:00:00.000+0000",
+            "body": doc(para(text(f"comment {n}")))}
+
+
+FULL_ISSUE = {"key": "A-1", "fields": {
+    "summary": "Fix login", "status": {"name": "In Progress"}, "issuetype": {"name": "Story"},
+    "priority": {"name": "High"}, "assignee": {"displayName": "Ana"}, "reporter": {"displayName": "Luis"},
+    "labels": ["auth"], "parent": {"key": "A-0"}, "description": doc(para(text("It fails"))),
+    "subtasks": [{"key": "A-2", "fields": {"summary": "Write test", "status": {"name": "To Do"}}}],
+    "issuelinks": [
+        {"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+         "outwardIssue": {"key": "A-9", "fields": {"summary": "Release", "status": {"name": "Done"}}}},
+        {"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+         "inwardIssue": {"key": "A-8", "fields": {"summary": "Design", "status": {"name": "Done"}}}}],
+    "comment": {"comments": [comment(1)], "total": 1}}}
+
+
+class IssueTests(TempConf):
+    def setUp(self):
+        super().setUp()
+        save_site_session()
+
+    def issue(self, argv, routes):
+        ctx = context.CLIContext(json_mode=True)
+        out = io.StringIO()
+        with fake(routes) as send, mock.patch.dict(os.environ, {"JIRA_URL": SITE}), contextlib.redirect_stdout(out):
+            cli.main(["issue", *argv], ctx=ctx)
+        return json.loads(out.getvalue()), send.requests
+
+    def test_issue_json_shape(self):
+        result, sent = self.issue(["A-1"], {("GET", ISSUE_URL): (200, FULL_ISSUE)})
+        self.assertEqual(result, {
+            "key": "A-1", "summary": "Fix login", "type": "Story", "status": "In Progress", "priority": "High",
+            "assignee": "Ana", "reporter": "Luis", "labels": ["auth"], "parent": "A-0", "description": "It fails",
+            "subtasks": [{"key": "A-2", "summary": "Write test", "status": "To Do"}],
+            "links": [{"type": "blocks", "key": "A-9", "summary": "Release", "status": "Done"},
+                      {"type": "is blocked by", "key": "A-8", "summary": "Design", "status": "Done"}],
+            "comments": [{"author": "User 1", "created": "2026-11-02T10:00:00.000+0000", "body": "comment 1"}],
+            "url": SITE + "/browse/A-1"})
+        self.assertEqual(len(sent), 1)
+
+    def test_issue_with_nothing_set(self):
+        bare = {"key": "A-1", "fields": {"summary": "Bare", "status": {"name": "To Do"}, "issuetype": {"name": "Task"},
+                                         "priority": None, "assignee": None, "reporter": None, "labels": [],
+                                         "parent": None, "description": None, "subtasks": [], "issuelinks": [],
+                                         "comment": {"comments": [], "total": 0}}}
+        result, sent = self.issue(["A-1"], {("GET", ISSUE_URL): (200, bare)})
+        self.assertEqual((result["priority"], result["assignee"], result["parent"], result["description"]),
+                         (None, None, None, None))
+        self.assertEqual((result["subtasks"], result["links"], result["comments"]), ([], [], []))
+        self.assertEqual(len(sent), 1)
+
+    def test_more_comments_are_fetched(self):
+        issue = json.loads(json.dumps(FULL_ISSUE))
+        issue["fields"]["comment"] = {"comments": [comment(n) for n in range(1, 6)], "total": 12}
+        more = SITE_API + "issue/A-1/comment?startAt=9&maxResults=3"
+        routes = {("GET", ISSUE_URL): (200, issue),
+                  ("GET", more): (200, {"comments": [comment(n) for n in (10, 11, 12)], "total": 12})}
+        result, sent = self.issue(["A-1", "--comments", "3"], routes)
+        self.assertEqual([c["body"] for c in result["comments"]], ["comment 10", "comment 11", "comment 12"])
+        self.assertEqual(sent[1].full_url, more)
+
+    def test_comments_zero(self):
+        result, sent = self.issue(["A-1", "--comments", "0"], {("GET", ISSUE_URL): (200, FULL_ISSUE)})
+        self.assertEqual(result["comments"], [])
+        self.assertEqual(len(sent), 1)
+
+    def test_url_uses_the_site_in_scoped_mode(self):
+        Jira(SITE).save_credentials({"url": SITE, "email": "me@example.com", "token": "tok", "mode": "scoped",
+                                     "cloud_id": CLOUD})
+        result, sent = self.issue(["A-1"], {("GET", GATEWAY_API + "issue/A-1?fields=" + ISSUE_FIELDS): (200, FULL_ISSUE)})
+        self.assertEqual(result["url"], SITE + "/browse/A-1")
+
+    def test_issue_text_mode_mentions_summary_status_and_description(self):
+        out = io.StringIO()
+        with fake({("GET", ISSUE_URL): (200, FULL_ISSUE)}), mock.patch.dict(os.environ, {"JIRA_URL": SITE}), \
+                contextlib.redirect_stdout(out):
+            cli.main(["issue", "A-1"], ctx=context.CLIContext())
+        for expected in ("A-1", "Fix login", "In Progress", "It fails", "comment 1", "A-9"):
+            self.assertIn(expected, out.getvalue())
 
 
 if __name__ == "__main__":
