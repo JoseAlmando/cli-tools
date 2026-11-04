@@ -37,3 +37,7 @@ def _find_version(source_pyproject, installed_version):
 
 
 __version__ = _find_version(Path(__file__).resolve().parents[2] / "pyproject.toml", lambda: metadata.version(NAME))
+
+
+def skill_dir():
+    return Path(__file__).resolve().parent / "skill"

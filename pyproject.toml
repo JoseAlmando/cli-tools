@@ -19,6 +19,9 @@ clt = "cli_tools.cli:run"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cli_tools = ["skill/*.md", "skill/references/*.md"]
+
 [dependency-groups]
 dev = ["ruff"]
 
