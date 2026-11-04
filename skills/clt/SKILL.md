@@ -5,7 +5,7 @@ description: Use the clt command-line tools (clt taiga, clt gitea, clt github, c
 
 # clt: Taiga, Gitea, GitHub, Jira and Azure DevOps from the command line
 
-`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. Every tool runs as `clt <tool>`; short names work too (`clt t`, `clt gt`, `clt gh`, `clt j`), but write the full ones so the user can read your commands.
+`clt` wraps the Taiga and Gitea REST APIs (`/api/v1/`) and the GitHub API (`https://api.github.com/`) with the user's saved session. Taiga and Gitea tokens are renewed automatically. Every tool runs as `clt <tool>`; short names work too (`clt t`, `clt gt`, `clt gh`, `clt j`, `clt ad`), but write the full ones so the user can read your commands.
 
 ## Before anything else
 

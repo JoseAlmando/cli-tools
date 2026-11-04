@@ -15,7 +15,7 @@ Command-line tools for the Taiga, Gitea, GitHub, Jira Cloud and Azure DevOps Ser
 
 Requires Python 3.9 or later. It installs one command, `clt`, which groups the tools (on Windows, `clt.exe`).
 
-Short names save typing: `clt t` is `clt taiga`, `clt gt` is `clt gitea`, `clt gh` is `clt github` and `clt j` is `clt jira`; and `lg` is `login`, `rfh` is `refresh`, `lo` is `logout`, `tk` is `token` and `i` is Jira's `issue`. `clt --help` lists them.
+Short names save typing: `clt t` is `clt taiga`, `clt gt` is `clt gitea`, `clt gh` is `clt github`, `clt j` is `clt jira` and `clt ad` is `clt azdo`; and `lg` is `login`, `rfh` is `refresh`, `lo` is `logout`, `tk` is `token` and `i` is Jira's `issue`. `clt --help` lists them.
 
 From GitHub, the latest release (or a given one with `@vX.Y.Z`):
 

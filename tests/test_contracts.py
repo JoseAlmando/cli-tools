@@ -35,7 +35,7 @@ tools:
   gitea, gt    client for the Gitea API, with OAuth2 login in the browser
   github, gh   client for the GitHub API, with a personal access token
   jira, j      client for the Jira Cloud API, with an API token
-  azdo         client for the Azure DevOps Services API, with a personal access token
+  azdo, ad     client for the Azure DevOps Services API, with a personal access token
   release      bump the version, update the changelog, tag and publish a release
   update       install the latest release of clt, or a given version
 
@@ -162,7 +162,8 @@ class HelpAndVersionTests(TempConf):
                  ("clt", ["release"], "usage: clt release "),
                  ("clt", ["update"], "usage: clt update "), ("clt", ["t"], "usage: clt taiga "),
                  ("clt", ["gt"], "usage: clt gitea "), ("clt", ["gh"], "usage: clt github "),
-                 ("clt", ["j"], "usage: clt jira "), ("clt", ["j", "i"], "usage: clt jira issue ")]
+                 ("clt", ["j"], "usage: clt jira "), ("clt", ["j", "i"], "usage: clt jira issue "),
+                 ("clt", ["ad"], "usage: clt azdo ")]
         for script, argv, usage in cases:
             with self.subTest(script=script, argv=argv):
                 code, out, _ = run_process(script, *argv, "--help")
@@ -190,9 +191,9 @@ class AliasTests(TempConf):
     def test_aliases_of_session_commands_are_blocked_by_read_only(self):
         env = {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "secret-taiga", "GITEA_URL": GITEA, "GITEA_TOKEN": "secret-gitea",
                "GITHUB_TOKEN": "secret-github", "JIRA_URL": JIRA, "JIRA_EMAIL": "e@example.com",
-               "JIRA_TOKEN": "secret-jira"}
+               "JIRA_TOKEN": "secret-jira", "AZDO_ORG": "example", "AZDO_TOKEN": "secret-azdo"}
         for argv in (["t", "tk"], ["taiga", "rfh"], ["gt", "lo"], ["gitea", "lg"], ["gh", "tk"], ["github", "rfh"],
-                     ["j", "tk"], ["jira", "lo"]):
+                     ["j", "tk"], ["jira", "lo"], ["ad", "tk"], ["azdo", "lo"], ["azdo", "lg"]):
             with self.subTest(argv=argv):
                 code, out, err = run_process("clt", "--read-only", *argv, env=env)
                 self.assertEqual((code, out), (4, ""))

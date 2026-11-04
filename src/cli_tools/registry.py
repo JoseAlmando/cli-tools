@@ -13,7 +13,7 @@ TOOLS = (
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
 )
 
-ALIASES = {"t": "taiga", "gt": "gitea", "gh": "github", "j": "jira"}
+ALIASES = {"t": "taiga", "gt": "gitea", "gh": "github", "j": "jira", "ad": "azdo"}
 
 
 def canonical(name):
