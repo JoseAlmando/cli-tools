@@ -150,7 +150,7 @@ clt jira mcp --agent claude --install
 clt azdo mcp --agent codex --org <org>      # Microsoft's local server, npx @azure-devops/mcp (Node.js 20+)
 ```
 
-The agent asks you to sign in the first time it uses the server (`codex mcp login atlassian`, `/mcp` in Claude Code or Gemini CLI).
+The agent asks you to sign in the first time it uses the server (`codex mcp login atlassian`, `/mcp` in Claude Code, `/mcp auth atlassian` in Gemini CLI); `clt jira mcp` prints the step for your agent. Azure DevOps opens the browser on first use.
 
 ## Configuration
 
@@ -198,9 +198,9 @@ uvx ruff check .                                            # the linter, a deve
 | Path | Contents |
 |---|---|
 | `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
-| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub, Jira or Azure DevOps: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `runner.run()`. |
+| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub, Jira or Azure DevOps: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` and `mcp` commands and `runner.run()`. |
 | `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`, `jira`, `azdo`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
-| `src/cli_tools/commands/` | `clt release` (with its version files and git helpers) and `clt update`. |
+| `src/cli_tools/commands/` | `clt release` (with its version files and git helpers), `clt update` and `clt skill`. |
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
 | `docs/architecture.md` | How the code is organized and how to add a tool. |
 | `src/cli_tools/skill/` | The skill that teaches AI agents to use `clt`, shipped in the package (`skills/clt` links to it). |
