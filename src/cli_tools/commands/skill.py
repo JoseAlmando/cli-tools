@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 from cli_tools import __version__, skill_dir
@@ -38,16 +39,27 @@ def _remove(path):
 
 
 def _replace(path, make):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    staging = path.with_name(f".{path.name}.new")
-    _remove(staging)
+    work = None
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        work = Path(tempfile.mkdtemp(prefix=".clt-skill-", dir=path.parent))
+        staging = work / path.name
         make(staging)
-    except BaseException:
-        _remove(staging)
-        raise
-    _remove(path)
-    staging.rename(path)
+        aside = None
+        if path.exists() or path.is_symlink():
+            aside = work / "old"
+            path.rename(aside)
+        try:
+            staging.rename(path)
+        except OSError:
+            if aside is not None:
+                aside.rename(path)
+            raise
+    except OSError as e:
+        raise ToolError(f"Could not write {path}: {e}") from None
+    finally:
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def _copy(staging):
@@ -139,15 +151,10 @@ def main(argv, ctx=None, prog="clt skill"):
         parser.print_help()
         return 2
     ctx.require_writes(f"skill {args.command}")
-    if args.command == "install":
-        agents = args.agent or [name for name in AGENTS if shutil.which(name)]
-        if not agents:
-            raise ToolError("No agent CLI (claude, codex, gemini) is on the PATH; choose one with --agent")
-        results = install(agents, args.link)
-    elif args.command == "uninstall":
-        results = uninstall(args.agent)
-    else:
-        results = refresh()
+    try:
+        results = _run(args)
+    except OSError as e:
+        raise ToolError(f"{e.filename or 'The skill folder'}: {e.strerror or e}") from None
     if ctx.json_mode:
         print(json.dumps({"action": args.command, "targets": results}))
     elif not results:
@@ -155,3 +162,14 @@ def main(argv, ctx=None, prog="clt skill"):
     for item in [] if ctx.json_mode else results:
         info(output.err.green("✓ ") + f"{item['agent']}: {item['path']} ({item['how']})")
     return 0
+
+
+def _run(args):
+    if args.command == "install":
+        agents = args.agent or [name for name in AGENTS if shutil.which(name)]
+        if not agents:
+            raise ToolError("No agent CLI (claude, codex, gemini) is on the PATH; choose one with --agent")
+        return install(agents, args.link)
+    if args.command == "uninstall":
+        return uninstall(args.agent)
+    return refresh()

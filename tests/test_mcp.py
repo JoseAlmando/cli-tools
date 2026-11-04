@@ -67,12 +67,23 @@ class ToolMcpTests(TempConf):
 
     def test_install_runs_the_agent_cli(self):
         self.found["codex"] = "/bin/codex"
-        self.run_.return_value = mock.Mock(returncode=3)
         code, _, _ = self.clt("jira", "mcp", "--agent", "codex", "--install")
-        self.assertEqual(code, 3)
+        self.assertEqual(code, 0)
         self.run_.assert_called_once()
         self.assertEqual(self.run_.call_args[0][0], ["/bin/codex", "mcp", "add", "atlassian", "--url", ATLASSIAN])
         self.assertNotIn("shell", self.run_.call_args[1])
+
+    def test_a_failing_agent_is_an_error(self):
+        self.found["codex"] = "/bin/codex"
+        self.run_.return_value = mock.Mock(returncode=2)
+        with self.assertRaisesRegex(ToolError, "(?s)codex exited 2.*codex mcp add atlassian"):
+            self.clt("jira", "mcp", "--agent", "codex", "--install")
+
+    def test_install_with_json_keeps_stdout_for_the_json(self):
+        self.found["codex"] = "/bin/codex"
+        _, out, _ = self.clt("jira", "mcp", "--agent", "codex", "--install", ctx=context.CLIContext(json_mode=True))
+        self.assertIsNotNone(self.run_.call_args[1].get("stdout"))
+        self.assertTrue(json.loads(out)["installed"])
 
     def test_install_without_the_cli(self):
         with self.assertRaisesRegex(ToolError, "gemini mcp add"):

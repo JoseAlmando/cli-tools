@@ -93,6 +93,38 @@ class SkillCommandTests(TempConf):
                 self.assertTrue(own.exists() or own.is_symlink())
         self.assertTrue(other.is_dir())
 
+    def test_a_foreign_sibling_is_left_alone(self):
+        sibling = self.claude().parent / ".clt.new"
+        sibling.mkdir(parents=True)
+        (sibling / "precious.txt").write_text("keep")
+        self.run_skill("install", "--agent", "claude")
+        self.assertEqual((sibling / "precious.txt").read_text(), "keep")
+        self.assertEqual(sorted(p.name for p in self.claude().parent.iterdir()), [".clt.new", "clt"])
+
+    def test_a_failed_swap_keeps_the_old_copy(self):
+        self.run_skill("install", "--agent", "claude")
+        (self.claude() / "SKILL.md").write_text("old copy")
+        real = Path.rename
+        calls = []
+
+        def rename(source, destination):
+            calls.append(source)
+            if len(calls) == 2:
+                raise OSError("the file is in use")
+            return real(source, destination)
+
+        with mock.patch.object(Path, "rename", rename), self.assertRaisesRegex(ToolError, "in use"):
+            self.run_skill("install", "--agent", "claude")
+        self.assertEqual((self.claude() / "SKILL.md").read_text(), "old copy")
+        self.assertTrue((self.claude() / ".clt-skill").is_file())
+        self.assertEqual(sorted(p.name for p in self.claude().parent.iterdir()), ["clt"])
+
+    def test_filesystem_errors_are_tool_errors(self):
+        (self.home / ".claude").mkdir()
+        (self.home / ".claude" / "skills").write_text("not a folder")
+        with self.assertRaises(ToolError):
+            self.run_skill("install", "--agent", "claude")
+
     def test_link(self):
         _, result, _ = self.run_skill("install", "--agent", "claude", "--link")
         self.assertTrue(self.claude().is_symlink())
