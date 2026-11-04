@@ -130,11 +130,27 @@ Every tool can run unattended:
 
 `--json` and `--read-only` can go anywhere on the command line.
 
-[`skills/clt/SKILL.md`](skills/clt/SKILL.md) is a skill for Claude Code (and other agents that read skills): it explains these rules and has recipes for the common Taiga and Gitea calls, and `skills/clt/references/jira.md` and `skills/clt/references/azure-devops.md` for Jira and Azure DevOps. To use it in Claude Code:
+clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules and has recipes for the common Taiga, Gitea and GitHub calls, plus `references/jira.md` and `references/azure-devops.md`, which an agent reads only when it works with Jira or Azure DevOps. Install it where your agents read skills:
 
 ```bash
-mkdir -p ~/.claude/skills && ln -s "$PWD/skills/clt" ~/.claude/skills/clt
+clt skill install                    # for every agent CLI on the PATH (claude, codex, gemini)
+clt skill install --agent codex      # Codex and Gemini CLI: ~/.agents/skills/clt; Claude Code: ~/.claude/skills/clt
+clt skill install --agent claude --link   # a link instead of a copy, when you work on clt itself
 ```
+
+The copies are marked with `.clt-skill`; `clt update` refreshes them, and `clt skill uninstall --agent …` removes only clt's own.
+
+### MCP servers
+
+Jira and Azure DevOps have official MCP servers. `clt` prints, or with `--install` runs, the command that registers one with your agent, for your user (not just one project); it never edits an agent's configuration or stores a token in it:
+
+```bash
+clt jira mcp --agent codex                  # codex mcp add atlassian --url https://mcp.atlassian.com/v1/mcp
+clt jira mcp --agent claude --install
+clt azdo mcp --agent codex --org <org>      # Microsoft's local server, npx @azure-devops/mcp (Node.js 20+)
+```
+
+The agent asks you to sign in the first time it uses the server (`codex mcp login atlassian`, `/mcp` in Claude Code or Gemini CLI).
 
 ## Configuration
 
@@ -187,7 +203,7 @@ uvx ruff check .                                            # the linter, a deve
 | `src/cli_tools/commands/` | `clt release` (with its version files and git helpers) and `clt update`. |
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
 | `docs/architecture.md` | How the code is organized and how to add a tool. |
-| `skills/clt/SKILL.md` | The skill that teaches AI agents to use `clt`. |
+| `src/cli_tools/skill/` | The skill that teaches AI agents to use `clt`, shipped in the package (`skills/clt` links to it). |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for AI agents that develop `clt`: rules, checks and how work flows. |
 | `scripts/check_conventions.py` | Checks commit messages and branch names, and installs the `commit-msg` hook ([CONTRIBUTING.md](CONTRIBUTING.md)). |
 | `scripts/check_private_words.py` | Checks that no private word (listed in `.git/info/private-words`, never pushed) is in the repo. |
