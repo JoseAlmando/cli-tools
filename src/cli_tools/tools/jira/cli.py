@@ -5,7 +5,7 @@ import sys
 import urllib.parse
 import webbrowser
 
-from cli_tools.core import api, context, http, output
+from cli_tools.core import api, context, http, mcp, output
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
 from cli_tools.tools.jira import adf, client
@@ -157,6 +157,15 @@ def cmd_issue(jira, args):
         print_issue(summary)
 
 
+MCP_URL = "https://mcp.atlassian.com/v1/mcp"
+MCP_THEN = {"claude": "/mcp in Claude Code to sign in", "codex": "codex mcp login atlassian",
+            "gemini": "/mcp auth atlassian in Gemini CLI"}
+
+
+def cmd_mcp(jira, args):
+    return mcp.run_mcp(args, args.ctx, mcp.http_command(args.agent, "atlassian", MCP_URL), MCP_THEN[args.agent])
+
+
 def build_parser(prog):
     epilog = f"""\
 examples:
@@ -210,6 +219,7 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
     p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
     p.set_defaults(func=cmd_issue)
+    mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Atlassian's MCP server to an agent")
     api.add_api_parser(sub, prog, "issue/<KEY>",
                        lambda j, args: api.run_api(args, j.call, args.ctx, client.next_page, client.items_key,
                                                    client.join), api_prefix=API_PREFIX)
@@ -226,6 +236,6 @@ def main(argv, ctx=None, prog="clt jira"):
     args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
-    if args.command == "logout":
+    if args.command in ("logout", "mcp"):
         return args.func(Jira(require_url=False), args)
     return args.func(Jira(getattr(args, "url", None)), args)
