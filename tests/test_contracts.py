@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TAIGA = "https://taiga.example.com"
 GITEA = "https://gitea.example.com"
 GITHUB = "https://api.github.com"
+JIRA = "https://example.atlassian.net"
 
 CLT_HELP = """\
 usage: clt TOOL [arguments]
@@ -32,6 +33,7 @@ tools:
   taiga    client for the Taiga API
   gitea    client for the Gitea API, with OAuth2 login in the browser
   github   client for the GitHub API, with a personal access token
+  jira     client for the Jira Cloud API, with an API token
   release  bump the version, update the changelog, tag and publish a release
   update   install the latest release of clt, or a given version
 
@@ -153,7 +155,8 @@ class HelpAndVersionTests(TempConf):
 
     def test_each_command_names_itself_in_its_usage(self):
         cases = [("clt", ["taiga"], "usage: clt taiga "), ("clt", ["gitea"], "usage: clt gitea "),
-                 ("clt", ["github"], "usage: clt github "), ("clt", ["release"], "usage: clt release "),
+                 ("clt", ["github"], "usage: clt github "), ("clt", ["jira"], "usage: clt jira "),
+                 ("clt", ["release"], "usage: clt release "),
                  ("clt", ["update"], "usage: clt update "), ("taiga", [], "usage: taiga "),
                  ("gitea", [], "usage: gitea ")]
         for script, argv, usage in cases:
@@ -165,7 +168,8 @@ class HelpAndVersionTests(TempConf):
     def test_the_api_clients_list_their_commands(self):
         for script, argv, commands in (("taiga", [], "login refresh logout me token api"),
                                        ("gitea", [], "login refresh logout me token api"),
-                                       ("clt", ["github"], "login refresh logout me token protect api")):
+                                       ("clt", ["github"], "login refresh logout me token protect api"),
+                                       ("clt", ["jira"], "login logout me token api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():
@@ -179,9 +183,9 @@ class HelpAndVersionTests(TempConf):
 
 class ExitCodeTests(TempConf):
     def test_unknown_tool_is_an_error(self):
-        code, out, err = run_process("clt", "jira")
+        code, out, err = run_process("clt", "nope")
         self.assertEqual((code, out), (1, ""))
-        self.assertIn("Unknown tool 'jira'", err)
+        self.assertIn("Unknown tool 'nope'", err)
 
     def test_wrong_usage(self):
         for script, argv in (("clt", ["taiga", "api", "FOO", "users/me"]), ("taiga", ["api", "FOO", "x"]),
@@ -192,7 +196,7 @@ class ExitCodeTests(TempConf):
     def test_not_logged_in(self):
         for script, argv, env in (("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}), ("taiga", ["me"], {"TAIGA_URL": TAIGA}),
                                   ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}), ("gitea", ["me"], {"GITEA_URL": GITEA}),
-                                  ("clt", ["github", "me"], {})):
+                                  ("clt", ["github", "me"], {}), ("clt", ["jira", "me"], {"JIRA_URL": JIRA})):
             with self.subTest(script=script, argv=argv):
                 code, out, err = run_process(script, *argv, env=env)
                 self.assertEqual((code, out), (3, ""))
@@ -231,9 +235,9 @@ class JsonErrorTests(TempConf):
         self.assertEqual((line["type"], line["exit_code"], line["status"]), ("NotLoggedIn", 3, None))
 
     def test_unknown_tool_ends_with_the_json_line(self):
-        code, _, err = run_process("clt", "--json", "jira")
+        code, _, err = run_process("clt", "--json", "nope")
         self.assertEqual(code, 1)
-        self.assertEqual(json_error(err), {"error": "Unknown tool 'jira'", "type": "ToolError", "exit_code": 1,
+        self.assertEqual(json_error(err), {"error": "Unknown tool 'nope'", "type": "ToolError", "exit_code": 1,
                                            "status": None})
 
     def test_read_only_error_as_json(self):
@@ -370,15 +374,18 @@ class SessionTests(TempConf):
         home = Path(self.tmp.name) / "home"
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         with mock.patch.dict(os.environ, env):
-            for name in ("TAIGA_CONF_DIR", "GITEA_CONF_DIR", "GITHUB_CONF_DIR"):
+            for name in ("TAIGA_CONF_DIR", "GITEA_CONF_DIR", "GITHUB_CONF_DIR", "JIRA_CONF_DIR"):
                 os.environ.pop(name)
             self.assertEqual(Path.home(), home)  # the real ~/.config is never touched
             write_json(home / ".config" / "taiga" / "credentials.json", {"url": TAIGA, "auth_token": "t"})
             write_json(home / ".config" / "gitea" / "credentials.json", {"url": GITEA, "access_token": "t"})
             write_json(home / ".config" / "github" / "credentials.json", {"token": "t"})
+            write_json(home / ".config" / "jira" / "credentials.json",
+                       {"url": JIRA, "email": "e@example.com", "token": "t", "mode": "site", "cloud_id": None})
             cases = [("taiga", [], {("GET", f"{TAIGA}/api/v1/users/me"): (200, '{"id": 1}', {})}),
                      ("gitea", [], {("GET", f"{GITEA}/api/v1/user"): (200, '{"id": 1}', {})}),
-                     ("clt", ["github"], {("GET", f"{GITHUB}/user"): (200, '{"id": 1}', {})})]
+                     ("clt", ["github"], {("GET", f"{GITHUB}/user"): (200, '{"id": 1}', {})}),
+                     ("clt", ["jira"], {("GET", f"{JIRA}/rest/api/3/myself"): (200, '{"accountId": "a"}', {})})]
             for script, argv, routes in cases:
                 tool = argv[0] if argv else script
                 with self.subTest(tool=tool):

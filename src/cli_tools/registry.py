@@ -7,6 +7,7 @@ TOOLS = (
     ("taiga", "cli_tools.tools.taiga.cli", "client for the Taiga API"),
     ("gitea", "cli_tools.tools.gitea.cli", "client for the Gitea API, with OAuth2 login in the browser"),
     ("github", "cli_tools.tools.github.cli", "client for the GitHub API, with a personal access token"),
+    ("jira", "cli_tools.tools.jira.cli", "client for the Jira Cloud API, with an API token"),
     ("release", "cli_tools.commands.release.cli", "bump the version, update the changelog, tag and publish a release"),
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
 )

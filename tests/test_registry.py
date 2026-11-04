@@ -40,7 +40,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_find(self):
         self.assertEqual(registry.find("taiga"), "cli_tools.tools.taiga.cli")
-        self.assertIsNone(registry.find("jira"))
+        self.assertIsNone(registry.find("nope"))
 
     def test_help_lists_every_entry_in_order(self):
         lines = cli.usage().splitlines()
@@ -51,7 +51,7 @@ class RegistryTests(unittest.TestCase):
 
 class LazyImportTests(TempConf):
     def test_help_and_version_import_no_tool(self):
-        for argv in (["--help"], ["--version"], ["jira"]):
+        for argv in (["--help"], ["--version"], ["nope"]):
             with self.subTest(argv=argv):
                 loaded = modules_loaded_by(*argv)
                 self.assertFalse({m for m in loaded if m.startswith(("cli_tools.tools", "cli_tools.commands"))})
