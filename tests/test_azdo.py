@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import urllib.parse
 from unittest import mock
 
 from cli_tools.core import credentials, http
@@ -147,3 +148,33 @@ class AzdoRequestTests(TempConf):
         os.environ["AZDO_TOKEN"] = "pat"
         with fake({}), self.assertRaises(ToolError):
             client().AzureDevOps().call("GET", "Demo/../_apis/projects", None)
+
+
+class AzdoPagingTests(TempConf):
+    def test_continuation_token_header(self):
+        c = client()
+        self.assertEqual(c.next_page({"X-MS-ContinuationToken": "abc"}, '{"value": [1]}', "_apis/projects?$top=2"),
+                         "_apis/projects?%24top=2&continuationToken=abc")
+        self.assertIsNone(c.next_page({"x-ms-continuationtoken": "abc"}, '{"value": [1]}',
+                                      "_apis/projects?continuationToken=abc"))
+
+    def test_top_and_skip(self):
+        c = client()
+        path = "Demo/_apis/git/repositories/web/pullrequests?$top=2"
+        full = '{"count": 2, "value": [1, 2]}'
+        first = c.next_page({}, full, path)
+        self.assertEqual(urllib.parse.parse_qs(first.partition("?")[2]), {"$top": ["2"], "$skip": ["2"]})
+        second = c.next_page({}, full, first)
+        self.assertEqual(urllib.parse.parse_qs(second.partition("?")[2]), {"$top": ["2"], "$skip": ["4"]})
+        self.assertIsNone(c.next_page({}, '{"count": 1, "value": [1]}', path))
+        self.assertIsNone(c.next_page({}, full, "Demo/_apis/git/repositories/web/pullrequests"))
+        self.assertIsNone(c.next_page({}, "<html>", path))
+        self.assertIsNone(c.next_page({}, full, None))
+
+    def test_join_updates_count(self):
+        c = client()
+        self.assertEqual(c.join([{"count": 2, "value": [1, 2]}, {"count": 1, "value": [3]}]),
+                         {"count": 3, "value": [1, 2, 3]})
+        self.assertEqual(c.items_key({"value": []}), "value")
+        self.assertIsNone(c.items_key({"id": 1}))
+        self.assertIsNone(c.items_key([1]))
