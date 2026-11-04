@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-from cli_tools.core import api, context, http, output, runner
+from cli_tools.core import api, context, http, output
 from cli_tools.core.errors import HttpError, ToolError, error_detail
 from cli_tools.core.output import info
 from cli_tools.tools.taiga.client import PROG, Taiga
@@ -88,16 +88,17 @@ for scripts and AI agents (any position on the command line):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="log in and save the credentials")
+    p = sub.add_parser("login", aliases=context.command_aliases("login"), help="log in and save the credentials")
     p.add_argument("-u", "--user", help="username or email (asked for if missing)")
     p.add_argument("--url", help="Taiga server, e.g. https://taiga.example.com")
     p.add_argument("--password-stdin", action="store_true", help="read the password from stdin (needs --user)")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("refresh", help="renew the token without asking for the password").set_defaults(func=cmd_refresh)
-    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("refresh", aliases=context.command_aliases("refresh"),
+                   help="renew the token without asking for the password").set_defaults(func=cmd_refresh)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the access token").set_defaults(func=cmd_token)
+    sub.add_parser("token", aliases=context.command_aliases("token"), help="print the access token").set_defaults(func=cmd_token)
     api.add_api_parser(sub, prog, "userstories?project=<id>", lambda t, args: api.run_api(args, t.call, args.ctx))
     return parser
 
@@ -109,11 +110,9 @@ def main(argv, ctx=None, prog=PROG):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     # logout only deletes the file, so it does not need to know the server
     return args.func(Taiga(getattr(args, "url", None), require_url=args.command != "logout"), args)
 
-
-def run():
-    return runner.run(main)

@@ -12,7 +12,14 @@ TOOLS = (
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
 )
 
+ALIASES = {"t": "taiga", "gt": "gitea", "gh": "github", "j": "jira"}
+
+
+def canonical(name):
+    return ALIASES.get(name, name)
+
 
 def find(name):
-    """The module path of the command called name, or None."""
+    """The module path of the command called name (or one of its aliases), or None."""
+    name = canonical(name)
     return next((module for command, module, _ in TOOLS if command == name), None)

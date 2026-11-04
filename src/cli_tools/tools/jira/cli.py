@@ -191,7 +191,7 @@ for scripts and AI agents (any position on the command line):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="check an Atlassian API token and save the session")
+    p = sub.add_parser("login", aliases=context.command_aliases("login"), help="check an Atlassian API token and save the session")
     p.add_argument("--url", help="the site, https://<site>.atlassian.net")
     p.add_argument("--email", help="the Atlassian account email")
     how = p.add_mutually_exclusive_group()
@@ -202,10 +202,11 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the API token").set_defaults(func=cmd_token)
-    p = sub.add_parser("issue", help="one issue as a short summary, with its description and comments as Markdown")
+    sub.add_parser("token", aliases=context.command_aliases("token"), help="print the API token").set_defaults(func=cmd_token)
+    p = sub.add_parser("issue", aliases=context.command_aliases("issue"),
+                       help="one issue as a short summary, with its description and comments as Markdown")
     p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
     p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
     p.set_defaults(func=cmd_issue)
@@ -222,6 +223,7 @@ def main(argv, ctx=None, prog="clt jira"):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     if args.command == "logout":

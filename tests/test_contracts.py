@@ -30,15 +30,15 @@ CLT_HELP = """\
 usage: clt TOOL [arguments]
 
 tools:
-  taiga    client for the Taiga API
-  gitea    client for the Gitea API, with OAuth2 login in the browser
-  github   client for the GitHub API, with a personal access token
-  jira     client for the Jira Cloud API, with an API token
-  release  bump the version, update the changelog, tag and publish a release
-  update   install the latest release of clt, or a given version
+  taiga, t     client for the Taiga API
+  gitea, gt    client for the Gitea API, with OAuth2 login in the browser
+  github, gh   client for the GitHub API, with a personal access token
+  jira, j      client for the Jira Cloud API, with an API token
+  release      bump the version, update the changelog, tag and publish a release
+  update       install the latest release of clt, or a given version
 
 Each tool has its own help: clt taiga --help, clt github --help.
-They are also installed on their own: taiga ..., gitea ...
+Short names for commands: login lg, refresh rfh, logout lo, token tk, issue i.
 
 for scripts and AI agents (any position on the command line):
   --json        errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
@@ -124,8 +124,8 @@ def write_json(path, data):
 
 
 class EntryPointTests(unittest.TestCase):
-    def test_the_three_commands_are_declared(self):
-        self.assertEqual(sorted(SCRIPTS), ["clt", "gitea", "taiga"])
+    def test_clt_is_the_only_command(self):
+        self.assertEqual(sorted(SCRIPTS), ["clt"])
 
     def test_every_entry_point_resolves_to_a_function(self):
         for name, (module, function) in SCRIPTS.items():
@@ -157,8 +157,9 @@ class HelpAndVersionTests(TempConf):
         cases = [("clt", ["taiga"], "usage: clt taiga "), ("clt", ["gitea"], "usage: clt gitea "),
                  ("clt", ["github"], "usage: clt github "), ("clt", ["jira"], "usage: clt jira "),
                  ("clt", ["release"], "usage: clt release "),
-                 ("clt", ["update"], "usage: clt update "), ("taiga", [], "usage: taiga "),
-                 ("gitea", [], "usage: gitea ")]
+                 ("clt", ["update"], "usage: clt update "), ("clt", ["t"], "usage: clt taiga "),
+                 ("clt", ["gt"], "usage: clt gitea "), ("clt", ["gh"], "usage: clt github "),
+                 ("clt", ["j"], "usage: clt jira "), ("clt", ["j", "i"], "usage: clt jira issue ")]
         for script, argv, usage in cases:
             with self.subTest(script=script, argv=argv):
                 code, out, _ = run_process(script, *argv, "--help")
@@ -166,8 +167,8 @@ class HelpAndVersionTests(TempConf):
                 self.assertTrue(out.startswith(usage), out[:80])
 
     def test_the_api_clients_list_their_commands(self):
-        for script, argv, commands in (("taiga", [], "login refresh logout me token api"),
-                                       ("gitea", [], "login refresh logout me token api"),
+        for script, argv, commands in (("clt", ["taiga"], "login refresh logout me token api"),
+                                       ("clt", ["gitea"], "login refresh logout me token api"),
                                        ("clt", ["github"], "login refresh logout me token protect api"),
                                        ("clt", ["jira"], "login logout me token issue api")):
             with self.subTest(script=script):
@@ -176,9 +177,34 @@ class HelpAndVersionTests(TempConf):
                     self.assertRegex(out, rf"(?m)^    {command} ")
 
     def test_a_tool_without_a_command_shows_its_help_and_fails(self):
-        code, out, _ = run_process("taiga")
+        code, out, _ = run_process("clt", "taiga")
         self.assertEqual(code, 2)
-        self.assertTrue(out.startswith("usage: taiga "))
+        self.assertTrue(out.startswith("usage: clt taiga "))
+
+
+class AliasTests(TempConf):
+    def test_aliases_of_session_commands_are_blocked_by_read_only(self):
+        env = {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "secret-taiga", "GITEA_URL": GITEA, "GITEA_TOKEN": "secret-gitea",
+               "GITHUB_TOKEN": "secret-github", "JIRA_URL": JIRA, "JIRA_EMAIL": "e@example.com",
+               "JIRA_TOKEN": "secret-jira"}
+        for argv in (["t", "tk"], ["taiga", "rfh"], ["gt", "lo"], ["gitea", "lg"], ["gh", "tk"], ["github", "rfh"],
+                     ["j", "tk"], ["jira", "lo"]):
+            with self.subTest(argv=argv):
+                code, out, err = run_process("clt", "--read-only", *argv, env=env)
+                self.assertEqual((code, out), (4, ""))
+                self.assertNotIn("secret", err)
+
+    def test_an_alias_runs_its_command(self):
+        code, out, _ = run_process("clt", "t", "tk", env={"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "tok"})
+        self.assertEqual((code, out), (0, "tok\n"))
+
+    def test_messages_name_clt(self):
+        for argv, env, login in ((["taiga", "me"], {"TAIGA_URL": TAIGA}, "clt taiga login"),
+                                 (["gt", "me"], {"GITEA_URL": GITEA}, "clt gitea login")):
+            with self.subTest(argv=argv):
+                code, _, err = run_process("clt", *argv, env=env)
+                self.assertEqual(code, 3)
+                self.assertIn(login, err)
 
 
 class ExitCodeTests(TempConf):
@@ -188,14 +214,14 @@ class ExitCodeTests(TempConf):
         self.assertIn("Unknown tool 'nope'", err)
 
     def test_wrong_usage(self):
-        for script, argv in (("clt", ["taiga", "api", "FOO", "users/me"]), ("taiga", ["api", "FOO", "x"]),
-                             ("gitea", ["nope"]), ("clt", ["release", "--bump", "huge"])):
+        for script, argv in (("clt", ["taiga", "api", "FOO", "users/me"]), ("clt", ["taiga", "api", "FOO", "x"]),
+                             ("clt", ["gitea", "nope"]), ("clt", ["release", "--bump", "huge"])):
             with self.subTest(argv=argv):
                 self.assertEqual(run_process(script, *argv)[0], 2)
 
     def test_not_logged_in(self):
-        for script, argv, env in (("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}), ("taiga", ["me"], {"TAIGA_URL": TAIGA}),
-                                  ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}), ("gitea", ["me"], {"GITEA_URL": GITEA}),
+        for script, argv, env in (("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}), ("clt", ["taiga", "me"], {"TAIGA_URL": TAIGA}),
+                                  ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}), ("clt", ["gitea", "me"], {"GITEA_URL": GITEA}),
                                   ("clt", ["github", "me"], {}), ("clt", ["jira", "me"], {"JIRA_URL": JIRA})):
             with self.subTest(script=script, argv=argv):
                 code, out, err = run_process(script, *argv, env=env)
@@ -204,9 +230,9 @@ class ExitCodeTests(TempConf):
 
     def test_read_only_blocks_writes_and_session_commands(self):
         env = {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "secret-taiga", "GITEA_URL": GITEA, "GITEA_TOKEN": "secret-gitea"}
-        for script, argv in (("taiga", ["--read-only", "POST", "tasks", "-d", "{}"]),
+        for script, argv in (("clt", ["taiga", "--read-only", "POST", "tasks", "-d", "{}"]),
                              ("clt", ["taiga", "--read-only", "DELETE", "tasks/1"]),
-                             ("clt", ["gitea", "--read-only", "token"]), ("gitea", ["--read-only", "logout"]),
+                             ("clt", ["gitea", "--read-only", "token"]), ("clt", ["gitea", "--read-only", "logout"]),
                              ("clt", ["github", "--read-only", "token"])):
             with self.subTest(argv=argv):
                 code, out, err = run_process(script, *argv, env=env)
@@ -215,12 +241,12 @@ class ExitCodeTests(TempConf):
                 self.assertNotIn("secret", err)
 
     def test_no_server_configured_is_an_error(self):
-        code, _, err = run_process("taiga", "me")
+        code, _, err = run_process("clt", "taiga", "me")
         self.assertEqual(code, 1)
         self.assertIn("login --url", err)
 
     def test_only_https_servers(self):
-        code, _, err = run_process("taiga", "me", env={"TAIGA_URL": "http://taiga.example.com"})
+        code, _, err = run_process("clt", "taiga", "me", env={"TAIGA_URL": "http://taiga.example.com"})
         self.assertEqual(code, 1)
         self.assertIn("https://", err)
 
@@ -241,7 +267,7 @@ class JsonErrorTests(TempConf):
                                            "status": None})
 
     def test_read_only_error_as_json(self):
-        code, _, err = run_process("taiga", "--json", "--read-only", "POST", "tasks", "-d", "{}",
+        code, _, err = run_process("clt", "taiga", "--json", "--read-only", "POST", "tasks", "-d", "{}",
                                    env={"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "t"})
         self.assertEqual(code, 4)
         self.assertEqual(json_error(err), {"error": "POST tasks was not sent: read-only mode (--read-only or CLT_READONLY)",
@@ -269,16 +295,16 @@ class GlobalFlagTests(TempConf):
     def test_the_environment_variables_turn_them_on(self):
         for value in ("1", "true", "yes", "TRUE"):
             with self.subTest(value=value):
-                code, _, err = run_process("taiga", "me", env={"TAIGA_URL": TAIGA, "CLT_JSON": value})
+                code, _, err = run_process("clt", "taiga", "me", env={"TAIGA_URL": TAIGA, "CLT_JSON": value})
                 self.assertEqual((code, json_error(err)["type"]), (3, "NotLoggedIn"))
-                code, _, _ = run_process("taiga", "POST", "tasks", "-d", "{}", env={**self.ENV, "CLT_READONLY": value})
+                code, _, _ = run_process("clt", "taiga", "POST", "tasks", "-d", "{}", env={**self.ENV, "CLT_READONLY": value})
                 self.assertEqual(code, 4)
 
     def test_other_values_leave_them_off(self):
-        code, _, err = run_process("taiga", "me", env={"TAIGA_URL": TAIGA, "CLT_JSON": "0"})
+        code, _, err = run_process("clt", "taiga", "me", env={"TAIGA_URL": TAIGA, "CLT_JSON": "0"})
         self.assertEqual(code, 3)
         self.assertTrue(err.startswith("✗ "))
-        code, out, _ = run_process("taiga", "POST", "tasks", "-d", '{"a": 1}', "--dry-run",
+        code, out, _ = run_process("clt", "taiga", "POST", "tasks", "-d", '{"a": 1}', "--dry-run",
                                    env={**self.ENV, "CLT_READONLY": "no"})
         self.assertEqual((code, json.loads(out)), (0, {"method": "POST", "path": "tasks", "body": {"a": 1}}))
 
@@ -308,7 +334,7 @@ class SessionTests(TempConf):
         creds = Path(os.environ["TAIGA_CONF_DIR"]) / "credentials.json"
         login = {("POST", f"{TAIGA}/api/v1/auth"): (200, json.dumps({"auth_token": "tok-1", "refresh": "r1",
                                                                       "username": "bot"}), {})}
-        code, out, err, sent = run_inline("taiga", "login", "--url", TAIGA, "--user", "bot", "--password-stdin",
+        code, out, err, sent = run_inline("clt", "taiga", "login", "--url", TAIGA, "--user", "bot", "--password-stdin",
                                           routes=login, stdin="s3cret\n")
         self.assertEqual((code, out), (0, ""))
         self.assertEqual(json.loads(sent[0].data), {"type": "normal", "username": "bot", "password": "s3cret"})
@@ -338,7 +364,7 @@ class SessionTests(TempConf):
         write_json(creds, {"url": GITEA, "client_id": "app", "access_token": "tok-1", "refresh_token": "r1",
                            "expires_at": 4102444800})
         user = (200, json.dumps({"id": 3, "login": "bot", "full_name": "Bot User", "email": "bot@example.com"}), {})
-        code, out, _, sent = run_inline("gitea", "me", "--json", routes={("GET", f"{GITEA}/api/v1/user"): user})
+        code, out, _, sent = run_inline("clt", "gitea", "me", "--json", routes={("GET", f"{GITEA}/api/v1/user"): user})
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"id": 3, "username": "bot", "full_name": "Bot User",
                                            "email": "bot@example.com", "url": GITEA, "expires_at": 4102444800,
@@ -382,8 +408,8 @@ class SessionTests(TempConf):
             write_json(home / ".config" / "github" / "credentials.json", {"token": "t"})
             write_json(home / ".config" / "jira" / "credentials.json",
                        {"url": JIRA, "email": "e@example.com", "token": "t", "mode": "site", "cloud_id": None})
-            cases = [("taiga", [], {("GET", f"{TAIGA}/api/v1/users/me"): (200, '{"id": 1}', {})}),
-                     ("gitea", [], {("GET", f"{GITEA}/api/v1/user"): (200, '{"id": 1}', {})}),
+            cases = [("clt", ["taiga"], {("GET", f"{TAIGA}/api/v1/users/me"): (200, '{"id": 1}', {})}),
+                     ("clt", ["gitea"], {("GET", f"{GITEA}/api/v1/user"): (200, '{"id": 1}', {})}),
                      ("clt", ["github"], {("GET", f"{GITHUB}/user"): (200, '{"id": 1}', {})}),
                      ("clt", ["jira"], {("GET", f"{JIRA}/rest/api/3/myself"): (200, '{"accountId": "a"}', {})})]
             for script, argv, routes in cases:
@@ -397,7 +423,7 @@ class SessionTests(TempConf):
     def test_a_token_from_the_environment_has_no_credentials_file(self):
         user = (200, json.dumps({"id": 1, "login": "bot"}), {})
         with mock.patch.dict(os.environ, {"GITEA_URL": GITEA, "GITEA_TOKEN": "pat"}):
-            code, out, _, sent = run_inline("gitea", "--json", "me", routes={("GET", f"{GITEA}/api/v1/user"): user})
+            code, out, _, sent = run_inline("clt", "gitea", "--json", "me", routes={("GET", f"{GITEA}/api/v1/user"): user})
         me = json.loads(out)
         self.assertEqual(set(me), ME_KEYS | {"expires_at"})
         self.assertIsNone(me["credentials_file"])
@@ -406,7 +432,7 @@ class SessionTests(TempConf):
     def test_logout_deletes_the_session(self):
         creds = Path(os.environ["TAIGA_CONF_DIR"]) / "credentials.json"
         write_json(creds, {"url": TAIGA, "auth_token": "t"})
-        code, _, err, sent = run_inline("taiga", "logout")
+        code, _, err, sent = run_inline("clt", "taiga", "logout")
         self.assertEqual((code, sent), (0, []))
         self.assertFalse(creds.exists())
         self.assertIn("Logged out", err)
@@ -422,7 +448,7 @@ class ApiCommandTests(TempConf):
         pulls = (200, '[{"number": 1, "title": "One"}]', {})
         for script, argv, url in (("clt", ["gitea"], f"{GITEA}/api/v1/repos/owner/repo/pulls"),
                                   ("clt", ["taiga"], f"{TAIGA}/api/v1/users/me"),
-                                  ("taiga", [], f"{TAIGA}/api/v1/users/me")):
+                                  ("clt", ["taiga"], f"{TAIGA}/api/v1/users/me")):
             path = url.split("/api/v1/")[1]
             with self.subTest(script=script, argv=argv):
                 short = run_inline(script, *argv, "GET", path, routes={("GET", url): pulls})
@@ -458,20 +484,20 @@ class ApiCommandTests(TempConf):
                                            "body": {"message": "Not Found"}})
 
     def test_dry_run_sends_nothing(self):
-        code, out, _, sent = run_inline("taiga", "PATCH", "issues/1", "-d", '{"status": 2}', "--dry-run")
+        code, out, _, sent = run_inline("clt", "taiga", "PATCH", "issues/1", "-d", '{"status": 2}', "--dry-run")
         self.assertEqual((code, sent), (0, []))
         self.assertEqual(json.loads(out), {"method": "PATCH", "path": "issues/1", "body": {"status": 2}})
 
     def test_the_token_only_goes_to_the_configured_server(self):
         for path in ("https://evil.example/x", "//evil.example/x"):
             with self.subTest(path=path):
-                code, _, err, sent = run_inline("taiga", "GET", path)
+                code, _, err, sent = run_inline("clt", "taiga", "GET", path)
                 self.assertEqual((code, sent), (1, []))
                 self.assertIn("Only paths relative to", err)
 
     def test_a_session_for_another_server_is_not_used(self):
         with mock.patch.dict(os.environ, {"TAIGA_URL": "https://other.example.com"}):
-            code, _, err, sent = run_inline("taiga", "me")
+            code, _, err, sent = run_inline("clt", "taiga", "me")
         self.assertEqual((code, sent), (1, []))
         self.assertIn("not https://other.example.com", err)
 

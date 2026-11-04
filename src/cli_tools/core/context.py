@@ -9,6 +9,15 @@ from cli_tools.core.errors import ReadOnlyError, ToolError
 GLOBAL_FLAGS = ("--json", "--read-only")
 # Commands that change the saved session or print the token; read-only mode blocks them
 SESSION_COMMANDS = ("login", "refresh", "logout", "token")
+COMMAND_ALIASES = {"login": "lg", "refresh": "rfh", "logout": "lo", "token": "tk", "issue": "i"}
+
+
+def command_aliases(name):
+    return [COMMAND_ALIASES[name]] if name in COMMAND_ALIASES else []
+
+
+def canonical_command(name):
+    return next((command for command, alias in COMMAND_ALIASES.items() if alias == name), name)
 
 
 def env_flag(environ, name):
@@ -34,7 +43,7 @@ class CLIContext:
 
     def check_session_command(self, command):
         """Read-only mode also blocks the commands that change the saved session or print the token."""
-        if command in SESSION_COMMANDS:
+        if canonical_command(command) in SESSION_COMMANDS:
             self.require_writes(command)
 
 

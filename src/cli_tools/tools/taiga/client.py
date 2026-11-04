@@ -7,7 +7,7 @@ from cli_tools.core import credentials, http, output
 from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 from cli_tools.core.output import info
 
-PROG = "taiga"
+PROG = "clt taiga"
 URL_VAR = "TAIGA_URL"
 
 
