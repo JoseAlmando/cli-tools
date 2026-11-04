@@ -314,6 +314,26 @@ class AdfTests(unittest.TestCase):
         nested = bullet([para(text("a")), bullet([para(text("b"))])])
         self.assertEqual(adf.to_text(doc(nested)), "- a\n  - b")
 
+    def test_ordered_list_keeps_its_first_number(self):
+        node = bullet([para(text("a"))], [para(text("b"))], ordered=True)
+        node["attrs"] = {"order": 4}
+        self.assertEqual(adf.to_text(doc(node)), "4. a\n5. b")
+        node["attrs"] = {"order": "x"}
+        self.assertEqual(adf.to_text(doc(node)), "1. a\n2. b")
+
+    def test_marks_become_markdown(self):
+        def marked(value, *kinds, href=None):
+            marks = [{"type": kind} for kind in kinds]
+            if href:
+                marks.append({"type": "link", "attrs": {"href": href}})
+            return {"type": "text", "text": value, "marks": marks}
+        inline = para(marked("bold", "strong"), text(" "), marked("it", "em"), text(" "),
+                      marked("of type 1", "strike"), text(" "), marked("f()", "code"), text(" "),
+                      marked("both", "strong", "em"), text(" "), marked("under", "underline"), text(" a"),
+                      marked(" pad ", "strong"), text("b "), marked("site", "strong", href="https://example.com"))
+        self.assertEqual(adf.to_text(doc(inline)),
+                         "**bold** *it* ~~of type 1~~ `f()` ***both*** under a **pad** b [**site**](https://example.com)")
+
     def test_code_block(self):
         node = {"type": "codeBlock", "attrs": {"language": "python"}, "content": [text("x = 1")]}
         self.assertEqual(adf.to_text(doc(node)), "```python\nx = 1\n```")
@@ -336,7 +356,18 @@ class AdfTests(unittest.TestCase):
     def test_table_rows(self):
         def row(*cells):
             return {"type": "tableRow", "content": [{"type": "tableCell", "content": [para(text(c))]} for c in cells]}
-        self.assertEqual(adf.to_text(doc({"type": "table", "content": [row("a", "b"), row("c", "d")]})), "a | b\nc | d")
+        self.assertEqual(adf.to_text(doc({"type": "table", "content": [row("a", "b"), row("c|x", "d")]})),
+                         "| a | b |\n| --- | --- |\n| c\\|x | d |")
+        self.assertEqual(adf.to_text(doc({"type": "table", "content": [row("a", "b"), row("c")]})),
+                         "| a | b |\n| --- | --- |\n| c |  |")
+
+    def test_cards_and_media_leave_a_trace(self):
+        node = doc({"type": "blockCard", "attrs": {"url": "https://example.com/a"}},
+                   {"type": "embedCard", "attrs": {"url": "https://example.com/b", "layout": "center"}},
+                   {"type": "mediaSingle", "content": [{"type": "media", "attrs": {"id": "1", "alt": "shot.png"}}]},
+                   {"type": "mediaGroup", "content": [{"type": "media", "attrs": {"id": "2"}}]})
+        self.assertEqual(adf.to_text(node),
+                         "https://example.com/a\n\nhttps://example.com/b\n\n[image: shot.png]\n\n[attachment]")
 
     def test_unknown_nodes_keep_their_text(self):
         node = doc({"type": "panel", "attrs": {"panelType": "info"}, "content": [para(text("Note"))]},

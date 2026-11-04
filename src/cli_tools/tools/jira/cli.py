@@ -162,7 +162,7 @@ def build_parser(prog):
 examples:
   {prog} login --url https://<site>.atlassian.net --create-token
   {prog} me
-  {prog} issue <KEY>                             # summary, description and comments as text
+  {prog} issue <KEY>                             # summary, description and comments as Markdown
   {prog} GET "search/jql?jql=assignee=currentUser() AND statusCategory!=Done&fields=key,summary,status" --all
   {prog} GET issue/<KEY>/transitions --fields transitions
   {prog} POST issue/<KEY>/transitions -d '{{"transition": {{"id": "31"}}}}' --dry-run
@@ -205,7 +205,7 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", help="print the API token").set_defaults(func=cmd_token)
-    p = sub.add_parser("issue", help="one issue as a short summary, with its description and comments as text")
+    p = sub.add_parser("issue", help="one issue as a short summary, with its description and comments as Markdown")
     p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
     p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
     p.set_defaults(func=cmd_issue)
