@@ -97,7 +97,7 @@ for scripts and AI agents (any position on the command line):
                                      epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="check a personal access token and save the session")
+    p = sub.add_parser("login", aliases=context.command_aliases("login"), help="check a personal access token and save the session")
     p.add_argument("--org", help="the organization, by name or as https://dev.azure.com/<organization>")
     how = p.add_mutually_exclusive_group()
     how.add_argument("--create-token", action="store_true", help="open the token page first")
@@ -105,9 +105,9 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the personal access token").set_defaults(func=cmd_token)
+    sub.add_parser("token", aliases=context.command_aliases("token"), help="print the personal access token").set_defaults(func=cmd_token)
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
                        lambda a, args: api.run_api(args, a.call, args.ctx, client.pager(), client.items_key,
                                                    client.join), api_prefix="/")
@@ -121,6 +121,7 @@ def main(argv, ctx=None, prog="clt azdo"):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     if args.command == "logout":
