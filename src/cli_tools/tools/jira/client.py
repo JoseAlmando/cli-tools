@@ -16,20 +16,11 @@ GATEWAY = "https://api.atlassian.com"
 TOKEN_PAGE = "https://id.atlassian.com/manage-profile/security/api-tokens"
 SCOPES = ("read:jira-work", "write:jira-work", "read:jira-user")
 REJECTED = (401, 403)
-PATH_SAFE = "/%:@!$&'()*+,;=-._~"
-QUERY_SAFE = PATH_SAFE + "?"
 _CLOUD_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def basic_header(email, token):
     return "Basic " + base64.b64encode(f"{email}:{token}".encode()).decode("ascii")
-
-
-def safe_path(path):
-    route, mark, query = path.partition("?")
-    if any(urllib.parse.unquote(part) in (".", "..") for part in route.split("/")):
-        raise ToolError(f"Paths cannot have . or .. segments (got {path!r})")
-    return urllib.parse.quote(route, safe=PATH_SAFE) + mark + urllib.parse.quote(query, safe=QUERY_SAFE)
 
 
 def check_cloud_id(value):
@@ -55,7 +46,7 @@ class Jira:
     def request(self, method, path, body=None, creds=None):
         root, prefix = self.base(creds)
         headers = {"Authorization": basic_header(creds["email"], creds["token"])}
-        url = http.api_url(root, safe_path(path), prefix)
+        url = http.api_url(root, http.safe_path(path), prefix)
         return http.json_request(method, url, body, None, self.cacert, headers)
 
     def cloud_id(self):

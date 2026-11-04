@@ -33,6 +33,17 @@ def resolve_url(cli_url, env_url, credentials_file, prog, var):
     return validate_base_url(saved["url"], var)
 
 
+PATH_SAFE = "/%:@!$&'()*+,;=-._~"
+QUERY_SAFE = PATH_SAFE + "?"
+
+
+def safe_path(path):
+    route, mark, query = path.partition("?")
+    if any(urllib.parse.unquote(part) in (".", "..") for part in route.split("/")):
+        raise ToolError(f"Paths cannot have . or .. segments (got {path!r})")
+    return urllib.parse.quote(route, safe=PATH_SAFE) + mark + urllib.parse.quote(query, safe=QUERY_SAFE)
+
+
 def api_url(base, path, prefix="/api/v1/"):
     """Only paths relative to the API: the token never leaves the configured server."""
     if "://" in path or path.startswith("//") or "\\" in path:
