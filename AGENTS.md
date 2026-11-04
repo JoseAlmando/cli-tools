@@ -17,7 +17,7 @@ publish) and `clt update` (self-update). It is a Python package with **no runtim
 ## Rules that are not negotiable
 
 1. **Standard library only** at runtime, **Python 3.9+**. Development tools (Ruff) are dev-only.
-2. **Works on Windows.** Console scripts are `.exe`; no `chmod` there; subprocesses take argument lists, never
+2. **Works on Windows.** The `clt` console script is `clt.exe`; no `chmod` there; subprocesses take argument lists, never
    `shell=True`; no bash-only scripts in the product (`scripts/` are Python).
 3. **English** in code, help, messages, comments, docs, tests and commit messages.
 4. **Never print, log or commit tokens.** Never read, list or write anything under `~/.config` — the owner's real
@@ -68,7 +68,7 @@ When a user or an agent would see something different, update in the same pull r
 
 Follow "Adding a tool" in [`docs/architecture.md`](docs/architecture.md): a package under `tools/<name>/` with
 `client.py` and `cli.py` (and `auth.py` only for a real login flow), one line in `registry.py`, tests against the fake
-server, and a standalone console script only if its name cannot clash with another program.
+server. `clt` is the only console script: no tool gets a command of its own.
 
 ## Releasing
 

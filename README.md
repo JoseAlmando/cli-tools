@@ -5,14 +5,16 @@ Command-line tools for the Taiga, Gitea, GitHub and Jira Cloud APIs, gathered un
 | Command | What it does |
 |---|---|
 | `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`, `clt jira …`. |
-| `taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
-| `gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
-| `clt github` | GitHub API client: login in the browser or with a token, and calls to `https://api.github.com/`. Only as `clt github` (a standalone `github` command would clash with GitHub Desktop's). |
-| `clt jira` | Jira Cloud API client: login with an Atlassian API token (classic or with scopes), calls to `/rest/api/3/`, and `clt jira issue KEY` to read a ticket as plain text. Only as `clt jira`. |
+| `clt taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
+| `clt gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
+| `clt github` | GitHub API client: login in the browser or with a token, and calls to `https://api.github.com/`. |
+| `clt jira` | Jira Cloud API client: login with an Atlassian API token (classic or with scopes), calls to `/rest/api/3/`, and `clt jira issue KEY` to read a ticket as plain text. |
 
 ## Installation
 
-Requires Python 3.9 or later. It installs three commands: `clt`, which groups the tools, and `taiga` and `gitea` on their own. On Windows they are generated as `.exe` files.
+Requires Python 3.9 or later. It installs one command, `clt`, which groups the tools (on Windows, `clt.exe`).
+
+Short names save typing: `clt t` is `clt taiga`, `clt gt` is `clt gitea`, `clt gh` is `clt github` and `clt j` is `clt jira`; and `lg` is `login`, `rfh` is `refresh`, `lo` is `logout`, `tk` is `token` and `i` is Jira's `issue`. `clt --help` lists them.
 
 From GitHub, the latest release (or a given one with `@vX.Y.Z`):
 
@@ -45,18 +47,16 @@ PYTHONPATH=src python3 -m cli_tools taiga me   # python on Windows
 ## Usage
 
 ```bash
-clt taiga me                                    # same as: taiga me
+clt taiga login --url https://taiga.example.com # the first time; the server is saved
+clt taiga me                                    # same as: clt t me
+clt taiga GET "userstories?project=<id>"
 
-taiga login --url https://taiga.example.com     # the first time; the server is saved
-taiga me
-taiga GET "userstories?project=<id>"
+clt gitea login --url https://gitea.example.com # opens the browser
+clt gitea login --source <source>               # go straight to a Gitea external login source
+clt gitea GET "repos/<owner>/<repo>/pulls?state=open"
+clt gitea POST repos/<owner>/<repo>/pulls -d @pr.json
 
-gitea login --url https://gitea.example.com     # opens the browser
-gitea login --source <source>                   # go straight to a Gitea external login source
-gitea GET "repos/<owner>/<repo>/pulls?state=open"
-gitea POST repos/<owner>/<repo>/pulls -d @pr.json
-
-export TAIGA_TOKEN="$(taiga token)"             # for other scripts
+export TAIGA_TOKEN="$(clt taiga token)"         # for other scripts
 
 clt github login                                # asks: authorize in the browser, create a token, or paste one
 clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
@@ -77,7 +77,7 @@ clt jira GET "search/jql?jql=assignee=currentUser()&fields=key,summary,status" -
 
 `clt jira login` asks for your Atlassian email and an API token (`--create-token` opens id.atlassian.com first). Both kinds of token work: a classic one talks to the site, and one with scopes (`read:jira-work`, `write:jira-work`, `read:jira-user`) goes through `api.atlassian.com` with the site's cloud id, which login finds on its own (`--cloud-id` gives it, `--scoped` skips the check). `clt jira issue KEY` prints a ticket's summary, people, links, subtasks, description and last comments, with Jira's rich text turned into plain text.
 
-`clt --help`, `taiga --help` and `gitea --help` list the commands and the environment variables.
+`clt --help` and each tool's `--help` (`clt taiga --help`, …) list the commands and the environment variables.
 
 ## Releasing a project
 
@@ -115,7 +115,7 @@ Settings per repo go in an optional `.clt.json`:
 
 Every tool can run unattended:
 
-- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN`, `GITEA_TOKEN` or `JIRA_EMAIL` with `JIRA_TOKEN`, and `taiga login --user <u> --password-stdin` reads the password from stdin.
+- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN`, `GITEA_TOKEN` or `JIRA_EMAIL` with `JIRA_TOKEN`, and `clt taiga login --user <u> --password-stdin` reads the password from stdin.
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one, and makes `me` print a JSON object (`id`, `username`, `full_name`, `email`, `url`, `credentials_file`, and `expires_at` in Gitea).
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
@@ -171,7 +171,7 @@ uvx ruff check .                                            # the linter, a deve
 | Path | Contents |
 |---|---|
 | `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
-| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub or Jira: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `run()`. |
+| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub or Jira: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` command and `runner.run()`. |
 | `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`, `jira`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
 | `src/cli_tools/commands/` | `clt release` (with its version files and git helpers) and `clt update`. |
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
