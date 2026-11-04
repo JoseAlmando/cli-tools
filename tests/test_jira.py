@@ -267,6 +267,17 @@ class JiraPagingTests(TempConf):
                                  env={"JIRA_URL": SITE})
         self.assertEqual(json.loads(out), {"issues": [{"key": "A-1"}], "isLast": True})
 
+    def test_max_items_stops_paging_once_it_has_enough(self):
+        base = SITE_API + "search/jql?jql=x"
+        routes = {("GET", base): page({"issues": [{"key": "A-1"}, {"key": "A-2"}], "nextPageToken": "t1"}),
+                  ("GET", base + "&nextPageToken=t1"): page({"issues": [{"key": "A-3"}], "nextPageToken": "t2"}),
+                  ("GET", base + "&nextPageToken=t2"): page({"issues": [{"key": "A-4"}], "isLast": True})}
+        _, out, err, sent = run(["GET", "search/jql?jql=x", "--all", "--max-items", "3"], routes,
+                                env={"JIRA_URL": SITE})
+        self.assertEqual([i["key"] for i in json.loads(out)["issues"]], ["A-1", "A-2", "A-3"])
+        self.assertEqual(len(sent), 2)
+        self.assertIn("there may be more", err)
+
     def test_fields_reach_issues(self):
         body = {"issues": [{"key": "A-1", "id": "1", "fields": {"status": {"name": "Done"}, "summary": "x"}}]}
         _, out, _, _ = run(["GET", "search/jql?jql=x", "--fields", "key,fields.status.name"],

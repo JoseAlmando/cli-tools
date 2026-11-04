@@ -46,7 +46,8 @@ def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/"):
                    help="keep only these comma-separated fields of each object; dots reach nested ones "
                         "(e.g. ref,subject,status_extra_info.name)")
     p.add_argument("--all", action="store_true", help=f"follow the pagination and join the pages (GET, up to {MAX_PAGES})")
-    p.add_argument("--max-items", type=int, metavar="N", help="keep only the first N items of a list")
+    p.add_argument("--max-items", type=int, metavar="N",
+                   help="keep only the first N items of a list; with --all, stop fetching pages once there are N")
     p.add_argument("--dry-run", action="store_true", help="print the request that would be sent and send nothing")
     p.set_defaults(func=func)
 
@@ -115,9 +116,15 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         status, raw, headers = call(args.method, args.path, body)
         pages = [raw]
         path = args.path
+        count = count_items(raw, items_key)
+        more = False
         while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page(headers, raw, path)):
+            if args.max_items is not None and count >= args.max_items:
+                more = True
+                break
             status, raw, headers = call("GET", path, None)
             pages.append(raw)
+            count += count_items(raw, items_key)
     except HttpError as e:
         if ctx.json_mode:
             detail = e.body if e.body.lstrip().startswith(("{", "[")) else error_detail(e.body)
@@ -152,15 +159,25 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         data = data[0]
     key = items_key(data) if items_key and isinstance(data, dict) else None
     if key is None or not isinstance(data.get(key), list):
-        output.print_response(json.dumps(trim(data, args), ensure_ascii=False), args.raw)
+        output.print_response(json.dumps(trim(data, args, more), ensure_ascii=False), args.raw)
         return 0
-    data = {**data, key: trim(data[key], args)}
+    data = {**data, key: trim(data[key], args, more)}
     output.print_response(json.dumps(data, ensure_ascii=False), args.raw)
     return 0
 
 
-def trim(data, args):
-    if args.max_items is not None and isinstance(data, list) and len(data) > args.max_items:
+def count_items(raw, items_key=None):
+    data = parse_json_or_text(raw)
+    if isinstance(data, dict) and items_key:
+        data = data.get(items_key(data) or "")
+    return len(data) if isinstance(data, list) else 0
+
+
+def trim(data, args, more=False):
+    if args.max_items is not None and isinstance(data, list) and more:
+        data = data[:args.max_items]
+        info(output.err.yellow(f"Showing {len(data)} items; there may be more."))
+    elif args.max_items is not None and isinstance(data, list) and len(data) > args.max_items:
         info(output.err.yellow(f"Showing {args.max_items} of {len(data)} items."))
         data = data[:args.max_items]
     if args.fields:
