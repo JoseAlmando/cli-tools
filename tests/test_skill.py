@@ -3,7 +3,8 @@ import shlex
 import unittest
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parents[1] / "skills" / "clt"
+ROOT = Path(__file__).resolve().parents[1]
+SKILL = ROOT / "src" / "cli_tools" / "skill"
 REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md"}
 COMMANDS = {"login", "me", "issue", "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
 WRITES = ("POST", "PUT", "PATCH", "DELETE")
@@ -18,6 +19,22 @@ def recipe_lines(text, tool):
 
 def command_words(line):
     return [w for w in shlex.split(line.split(" #")[0])[2:] if w not in FLAGS]
+
+
+class PackagedSkillTests(unittest.TestCase):
+    def test_the_package_carries_the_skill(self):
+        import cli_tools
+        folder = cli_tools.skill_dir()
+        self.assertTrue((folder / "SKILL.md").is_file())
+        self.assertTrue((folder / "references" / "jira.md").is_file())
+        self.assertEqual(folder.parent, Path(cli_tools.__file__).resolve().parent)
+
+    def test_package_data_declares_the_skill(self):
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        table = re.search(r"^\[tool\.setuptools\.package-data\]\n(.*?)(?=^\[|\Z)", text, re.M | re.S)
+        self.assertIsNotNone(table)
+        self.assertIn('"skill/*.md"', table.group(1))
+        self.assertIn('"skill/references/*.md"', table.group(1))
 
 
 class SkillTests(unittest.TestCase):
