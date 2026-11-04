@@ -159,3 +159,13 @@ class ShortcutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SafePathTests(unittest.TestCase):
+    def test_encodes_once_and_refuses_dot_segments(self):
+        from cli_tools.core import http
+        self.assertEqual(http.safe_path("Demo Project/_apis/wit/workitems/$Task?q=a b&x=%20"),
+                         "Demo%20Project/_apis/wit/workitems/$Task?q=a%20b&x=%20")
+        for bad in ("a/../b", "./a", "a/%2e%2e/b"):
+            with self.subTest(bad=bad), self.assertRaises(http.ToolError):
+                http.safe_path(bad)
