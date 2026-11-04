@@ -101,3 +101,10 @@ jobs:
           expect 3 clt gitea --json me
           TAIGA_TOKEN=t expect 4 clt t --json --read-only POST tasks -d '{}'
           GITEA_TOKEN=t expect 4 clt gt --json --read-only tk
+          # The skill ships inside the package: install it into a throwaway home
+          home="$RUNNER_TEMP/home"
+          HOME="$home" USERPROFILE="$home" clt skill install --agent codex
+          if [ "$RUNNER_OS" = Windows ]; then home="$(cygpath -u "$home")"; fi
+          for file in SKILL.md references/jira.md references/azure-devops.md .clt-skill; do
+            test -f "$home/.agents/skills/clt/$file" || { echo "::error::$file missing from the installed skill"; exit 1; }
+          done
