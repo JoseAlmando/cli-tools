@@ -180,6 +180,38 @@ class OutputSizeTests(TempConf):
         self.assertEqual(seen, ["items", "items?page=2", "items?page=3"])
 
 
+    def test_fields_and_max_items_reach_a_wrapped_list(self):
+        body = {"total": 3, "issues": [{"key": "A-1", "x": 1}, {"key": "A-2", "x": 2}, {"key": "A-3", "x": 3}]}
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = api.run_api(api_args(fields="key", max_items=2), lambda m, p, b: (200, json.dumps(body), {}),
+                               items_key=lambda data: "issues")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out.getvalue()), {"total": 3, "issues": [{"key": "A-1"}, {"key": "A-2"}]})
+        self.assertIn("2 of 3", err.getvalue())
+
+    def test_all_passes_the_body_and_path_to_next_page_and_uses_join(self):
+        pages = {"items": '{"issues": [{"n": 1}], "nextPageToken": "t"}',
+                 "items?nextPageToken=t": '{"issues": [{"n": 2}], "isLast": true}'}
+        seen, asked = [], []
+
+        def call(method, path, body):
+            seen.append(path)
+            return 200, pages[path], {}
+
+        def next_page(headers, body, path):
+            asked.append((json.loads(body), path))
+            return "items?nextPageToken=t" if path == "items" else None
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            api.run_api(api_args(all=True), call, next_page=next_page,
+                        join=lambda parsed: {"issues": [i for p in parsed for i in p["issues"]]})
+        self.assertEqual(json.loads(out.getvalue()), {"issues": [{"n": 1}, {"n": 2}]})
+        self.assertEqual(seen, ["items", "items?nextPageToken=t"])
+        self.assertEqual(asked[0], ({"issues": [{"n": 1}], "nextPageToken": "t"}, "items"))
+
+
 class MeJsonTests(TempConf):
     def run_me(self, tool, body, env):
         out = io.StringIO()

@@ -1,6 +1,7 @@
 """The api command every client shares: METHOD path [-d JSON], with pagination, filters and --dry-run."""
 import json
 import sys
+import urllib.parse
 from pathlib import Path
 
 from cli_tools.core import output
@@ -65,7 +66,23 @@ def pick_fields(value, fields):
     return picked
 
 
-def next_page_path(headers, api_root=None):
+def set_query(path, params):
+    base, _, query = path.partition("?")
+    done = set()
+    result = []
+    for name, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
+        if name in params:
+            if name in done:
+                continue
+            done.add(name)
+            value = params[name]
+        if value is not None:
+            result.append((name, value))
+    result += [(name, value) for name, value in params.items() if name not in done and value is not None]
+    return f"{base}?{urllib.parse.urlencode(result)}" if result else base
+
+
+def next_page_path(headers, body=None, path=None, api_root=None):
     """The next page as a path relative to the API: a Link rel="next" or Taiga's x-pagination-next.
 
     With api_root (e.g. "https://api.github.com/"), the next URL must start with it; otherwise it must be under /api/v1/.
@@ -84,7 +101,7 @@ def next_page_path(headers, api_root=None):
     return url.split("/api/v1/", 1)[1]
 
 
-def run_api(args, call, ctx=None, next_page=next_page_path):
+def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join=None):
     """call(method, path, body) -> (status, body, headers), with each tool's token renewal."""
     ctx = ctx or CLIContext.from_env()
     body = read_body(args.data)
@@ -98,7 +115,7 @@ def run_api(args, call, ctx=None, next_page=next_page_path):
         status, raw, headers = call(args.method, args.path, body)
         pages = [raw]
         path = args.path
-        while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page(headers)):
+        while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page(headers, raw, path)):
             status, raw, headers = call("GET", path, None)
             pages.append(raw)
     except HttpError as e:
@@ -125,18 +142,30 @@ def run_api(args, call, ctx=None, next_page=next_page_path):
         return 0
     data = [parse_json_or_text(page) for page in pages]
     if len(pages) > 1:
-        data = [item for page in data for item in (page if isinstance(page, list) else [page])]
+        if join:
+            data = join(data)
+        else:
+            data = [item for page in data for item in (page if isinstance(page, list) else [page])]
         if len(pages) == MAX_PAGES:
             info(output.err.yellow(f"Stopped after {MAX_PAGES} pages; there may be more."))
     else:
         data = data[0]
+    key = items_key(data) if items_key and isinstance(data, dict) else None
+    if key is None or not isinstance(data.get(key), list):
+        output.print_response(json.dumps(trim(data, args), ensure_ascii=False), args.raw)
+        return 0
+    data = {**data, key: trim(data[key], args)}
+    output.print_response(json.dumps(data, ensure_ascii=False), args.raw)
+    return 0
+
+
+def trim(data, args):
     if args.max_items is not None and isinstance(data, list) and len(data) > args.max_items:
         info(output.err.yellow(f"Showing {args.max_items} of {len(data)} items."))
         data = data[:args.max_items]
     if args.fields:
         data = pick_fields(data, [f.strip() for f in args.fields.split(",") if f.strip()])
-    output.print_response(json.dumps(data, ensure_ascii=False), args.raw)
-    return 0
+    return data
 
 
 def parse_json_or_text(raw):

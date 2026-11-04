@@ -96,5 +96,5 @@ class GitHub:
             return self.request(method, path, body, self.load_credentials()["token"])
 
 
-def next_page(headers):
+def next_page(headers, body=None, path=None):
     return api.next_page_path(headers, api_root=API_ROOT + "/")
