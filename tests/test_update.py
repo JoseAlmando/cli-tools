@@ -60,9 +60,10 @@ class UpdateTests(TempConf):
 
     def test_installs_the_latest_or_a_given_older_version(self):
         self.update()
-        self.assertEqual(self.run_.call_args[0][0], update.install_command("0.10.0"))
+        self.assertEqual(self.run_.call_args_list[0][0][0], update.install_command("0.10.0"))
+        self.run_.reset_mock()
         self.update("v0.1.0")
-        self.assertEqual(self.run_.call_args[0][0],
+        self.assertEqual(self.run_.call_args_list[0][0][0],
                          ["uv", "tool", "install", "--force", "git+https://github.com/JoseAlmando/cli-tools@v0.1.0"])
 
     def test_an_unknown_version_lists_the_available_ones(self):
@@ -93,6 +94,28 @@ class UpdateTests(TempConf):
     def test_elsewhere_it_returns_the_installer_exit_code(self):
         self.run_.return_value = mock.Mock(returncode=7)
         self.assertEqual(self.update()[0], 7)
+
+    def test_a_successful_update_refreshes_the_skill_copies(self):
+        with mock.patch.object(update.shutil, "which", lambda name: f"/x/{name}"):
+            self.update()
+        self.assertEqual(self.run_.call_args_list[1][0][0], ["/x/clt", "skill", "refresh"])
+        self.assertIsNotNone(self.run_.call_args_list[1][1].get("stdout"))
+
+    def test_a_failed_update_refreshes_nothing(self):
+        self.run_.return_value = mock.Mock(returncode=7)
+        self.update()
+        self.assertEqual(self.run_.call_count, 1)
+
+    def test_without_the_new_clt_on_the_path_it_says_to_refresh(self):
+        with mock.patch.object(update.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None):
+            _, _, err = self.update()
+        self.assertEqual(self.run_.call_count, 1)
+        self.assertIn("clt skill refresh", err)
+
+    def test_on_windows_it_says_to_refresh_afterwards(self):
+        with mock.patch.object(update, "on_windows", lambda: True):
+            _, _, err = self.update()
+        self.assertIn("clt skill refresh", err)
 
     def test_read_only_blocks_an_update(self):
         with self.assertRaises(errors.ReadOnlyError):

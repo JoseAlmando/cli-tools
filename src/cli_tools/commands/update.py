@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import urllib.parse
 import urllib.request
 from importlib import metadata
@@ -109,9 +110,21 @@ def main(argv, ctx=None, prog="clt update"):
     if on_windows():
         # A running clt.exe cannot be replaced: let uv finish after this process exits
         subprocess.Popen(command, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
-        info(f"The update continues in the background; run {output.err.bold('clt --version')} in a few seconds.")
+        info(f"The update continues in the background; run {output.err.bold('clt --version')} in a few seconds, "
+             f"then {output.err.bold('clt skill refresh')} if you installed the skill.")
         report(ctx, installed, available[0], target, "started")
         return 0
     code = subprocess.run(command).returncode
+    if code == 0:
+        refresh_skill()
     report(ctx, installed, available[0], target, "installed" if code == 0 else "failed")
     return code
+
+
+def refresh_skill():
+    new = shutil.which("clt")
+    if not new:
+        info(f"Run {output.err.bold('clt skill refresh')} to update the copies of the skill.")
+        return
+    if subprocess.run([new, "skill", "refresh"], stdout=sys.stderr).returncode != 0:
+        info(f"The skill copies were not refreshed; run {output.err.bold('clt skill refresh')}.")
