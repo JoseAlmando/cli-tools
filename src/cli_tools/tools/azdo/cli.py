@@ -71,7 +71,7 @@ examples:
   {prog} login --org <organization> --create-token
   {prog} me
   {prog} GET _apis/projects --fields id,name
-  {prog} GET "<project>/_apis/git/repositories/<repo>/pullrequests?$top=50" --all --fields pullRequestId,title
+  {prog} GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --all --fields pullRequestId,title
   {prog} PATCH _apis/wit/workitems/<id> -d '[{{"op": "add", "path": "/fields/System.State", "value": "Active"}}]' --dry-run
 
 personal access token (https://dev.azure.com/<organization>/_usersSettings/tokens), scopes:
@@ -109,7 +109,7 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", help="print the personal access token").set_defaults(func=cmd_token)
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
-                       lambda a, args: api.run_api(args, a.call, args.ctx, client.next_page, client.items_key,
+                       lambda a, args: api.run_api(args, a.call, args.ctx, client.pager(), client.items_key,
                                                    client.join), api_prefix="/")
     return parser
 

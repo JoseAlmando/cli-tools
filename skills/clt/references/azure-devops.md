@@ -24,7 +24,7 @@ Field names have dots (`System.Title`), so keep `fields` whole in `--fields`.
 ```bash
 clt azdo --json --read-only GET '_apis/wit/workitems/<id>?$expand=relations' --fields id,fields,relations
 clt azdo --json --read-only GET "_apis/wit/workitems?ids=<id>,<id>&fields=System.Title,System.State,System.AssignedTo" --fields id,fields
-clt azdo --json --read-only GET "<project>/_apis/wit/workitemtypes/Task/states" --fields name,category
+clt azdo --json --read-only GET "<project>/_apis/wit/workitemtypes/Task" --fields name,states
 ```
 
 Query with WIQL. It is a read sent as `POST`, so it cannot run under `--read-only`; it returns only ids, read them with the second recipe above. `wiql.json`:
@@ -53,7 +53,7 @@ clt azdo --json POST '<project>/_apis/wit/workitems/$Task' -d @task.json --dry-r
 clt azdo --json POST '<project>/_apis/wit/workitems/$Task' -d @task.json --fields id,_links.html.href
 ```
 
-Change the state. The names depend on the process (Agile: New, Active, Resolved, Closed; Scrum: To Do, In Progress, Done; Basic: To Do, Doing, Done); list them with the `states` recipe above.
+Change the state. The names depend on the process (Agile: New, Active, Resolved, Closed; Scrum: To Do, In Progress, Done; Basic: To Do, Doing, Done); list them with the work item type recipe above (its `states`).
 
 ```bash
 clt azdo --json PATCH _apis/wit/workitems/<id> -d '[{"op": "add", "path": "/fields/System.State", "value": "Active"}]' --dry-run
