@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-11-04
+
+### Features
+
+- feat(jira): client with classic and scoped API tokens
+- feat(jira): login, me, token and api commands
+- feat(jira): issue command with ADF turned into text
+
+### Fixes
+
+- fix(jira): encode the path typed by the user and refuse dot segments
+- fix(jira): keep ADF formatting in issue text
+- fix(api): stop paging once --max-items has enough
+
+### Other
+
+- refactor(api): let tools page through the body and filter lists wrapped in an object
+- docs: Jira in the README, the architecture and the skill
+
 ## 0.3.0 - 2026-11-03
 
 ### Fixes
