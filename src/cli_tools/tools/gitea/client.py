@@ -9,7 +9,7 @@ from cli_tools.core import credentials, http, output
 from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 from cli_tools.core.output import info
 
-PROG = "gitea"
+PROG = "clt gitea"
 URL_VAR = "GITEA_URL"
 # Public OAuth2 app built into Gitea for tea (redirects to 127.0.0.1 on any port)
 DEFAULT_CLIENT_ID = "d57cb8c4-630c-4168-8324-ec79935e18d4"

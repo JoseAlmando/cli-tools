@@ -44,9 +44,11 @@ class RegistryTests(unittest.TestCase):
 
     def test_help_lists_every_entry_in_order(self):
         lines = cli.usage().splitlines()
+        short = {tool: alias for alias, tool in registry.ALIASES.items()}
         start = lines.index("tools:") + 1
         self.assertEqual(lines[start:start + len(registry.TOOLS)],
-                         [f"  {name:<8} {description}" for name, _, description in registry.TOOLS])
+                         [f"  {name + ', ' + short[name] if name in short else name:<12} {description}"
+                          for name, _, description in registry.TOOLS])
 
 
 class LazyImportTests(TempConf):
@@ -75,7 +77,30 @@ class DelegationTests(TempConf):
                 cli.main(["--help"])
         self.assertEqual(calls[0][0], ["a", "--b"])
         self.assertEqual(calls[0][1]["prog"], "clt fake")
-        self.assertIn("  fake     a tool added by one registry line", out.getvalue())
+        self.assertIn("  fake         a tool added by one registry line", out.getvalue())
+
+
+class AliasRuleTests(unittest.TestCase):
+    def test_tool_aliases_point_to_tools_and_clash_with_nothing(self):
+        from cli_tools.core.api import METHODS
+        names = {name for name, _, _ in registry.TOOLS}
+        for alias, tool in registry.ALIASES.items():
+            with self.subTest(alias=alias):
+                self.assertIn(tool, names)
+                self.assertNotIn(alias, names)
+                self.assertNotIn(alias.upper(), METHODS)
+        self.assertEqual(len(registry.ALIASES), len(set(registry.ALIASES)))
+
+    def test_command_aliases_clash_with_no_command_or_method(self):
+        from cli_tools.core import context
+        from cli_tools.core.api import METHODS
+        commands = {"login", "refresh", "logout", "me", "token", "api", "protect", "issue"}
+        aliases = list(context.COMMAND_ALIASES.values())
+        self.assertEqual(len(aliases), len(set(aliases)))
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                self.assertNotIn(alias, commands)
+                self.assertNotIn(alias.upper(), METHODS)
 
 
 if __name__ == "__main__":

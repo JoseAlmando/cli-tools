@@ -9,9 +9,13 @@ from cli_tools.core.errors import ToolError
 
 def usage():
     lines = ["usage: clt TOOL [arguments]", "", "tools:"]
-    lines += [f"  {name:<8} {description}" for name, _, description in registry.TOOLS]
+    short = {tool: alias for alias, tool in registry.ALIASES.items()}
+    labels = [(f"{name}, {short[name]}" if name in short else name, description)
+              for name, _, description in registry.TOOLS]
+    lines += [f"  {label:<12} {description}" for label, description in labels]
+    commands = ", ".join(f"{name} {alias}" for name, alias in context.COMMAND_ALIASES.items())
     lines += ["", "Each tool has its own help: clt taiga --help, clt github --help.",
-              "They are also installed on their own: taiga ..., gitea ...",
+              f"Short names for commands: {commands}.",
               "",
               "for scripts and AI agents (any position on the command line):",
               "  --json        errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)",
@@ -34,7 +38,7 @@ def main(argv, ctx=None):
         raise ToolError(f"Unknown tool {argv[0]!r}")
     # Only the tool that runs is imported
     ctx = ctx or context.CLIContext.from_env()
-    return importlib.import_module(module).main(argv[1:], ctx=ctx, prog=f"clt {argv[0]}")
+    return importlib.import_module(module).main(argv[1:], ctx=ctx, prog=f"clt {registry.canonical(argv[0])}")
 
 
 def run():

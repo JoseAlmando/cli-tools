@@ -15,8 +15,6 @@ dependencies = []
 
 [project.scripts]
 clt = "cli_tools.cli:run"
-taiga = "cli_tools.tools.taiga.cli:run"
-gitea = "cli_tools.tools.gitea.cli:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

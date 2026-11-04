@@ -21,7 +21,7 @@ def run(main, argv=None):
             output.info(output.err.red("✗ ") + str(e))
         return e.exit_code
     except BrokenPipeError:
-        # e.g. "taiga GET ... | head": not an error
+        # e.g. "clt taiga GET ... | head": not an error
         sys.stderr.close()
         return 0
     except KeyboardInterrupt:

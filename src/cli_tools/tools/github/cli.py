@@ -158,7 +158,8 @@ for scripts and AI agents (any position on the command line):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="log in from the browser or with a token, and save the session")
+    p = sub.add_parser("login", aliases=context.command_aliases("login"),
+                       help="log in from the browser or with a token, and save the session")
     how = p.add_mutually_exclusive_group()
     how.add_argument("--browser", action="store_true", help="authorize in the browser with a one-time code")
     how.add_argument("--create-token", action="store_true",
@@ -167,10 +168,12 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("refresh", help="renew the token of a browser login now").set_defaults(func=cmd_refresh)
-    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("refresh", aliases=context.command_aliases("refresh"),
+                   help="renew the token of a browser login now").set_defaults(func=cmd_refresh)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
+    sub.add_parser("token", aliases=context.command_aliases("token"),
+                   help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
     p = sub.add_parser("protect", help="rulesets so only the repo admin can update main and create, move or delete v* tags")
     p.add_argument("repo", metavar="OWNER/REPO")
     p.add_argument("--dry-run", action="store_true", help="print the requests that would be sent and send nothing")
@@ -187,6 +190,7 @@ def main(argv, ctx=None, prog="clt github"):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     return args.func(GitHub(), args)

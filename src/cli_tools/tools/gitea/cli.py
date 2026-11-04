@@ -4,7 +4,7 @@ import json
 import os
 import time
 
-from cli_tools.core import api, context, http, output, runner
+from cli_tools.core import api, context, http, output
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
 from cli_tools.tools.gitea import auth
@@ -86,17 +86,20 @@ for scripts and AI agents (any position on the command line):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p = sub.add_parser("login", help="log in through the browser (OAuth2 + PKCE) and save the credentials")
+    p = sub.add_parser("login", aliases=context.command_aliases("login"),
+                       help="log in through the browser (OAuth2 + PKCE) and save the credentials")
     p.add_argument("--url", help="Gitea server, e.g. https://gitea.example.com")
     p.add_argument("--source", help="Gitea external login source to go straight to (GITEA_AUTH_SOURCE)")
     p.add_argument("--no-browser", action="store_true", help="do not open the browser; only print the link")
     p.add_argument("--timeout", type=int, default=300, help="seconds to wait for the browser (300)")
     p.set_defaults(func=cmd_login)
 
-    sub.add_parser("refresh", help="renew the token without opening the browser").set_defaults(func=cmd_refresh)
-    sub.add_parser("logout", help="delete the saved credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("refresh", aliases=context.command_aliases("refresh"),
+                   help="renew the token without opening the browser").set_defaults(func=cmd_refresh)
+    sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
-    sub.add_parser("token", help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
+    sub.add_parser("token", aliases=context.command_aliases("token"),
+                   help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
     api.add_api_parser(sub, prog, "repos/<owner>/<repo>/pulls", lambda g, args: api.run_api(args, g.call, args.ctx))
     return parser
 
@@ -108,11 +111,9 @@ def main(argv, ctx=None, prog=PROG):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     # logout only deletes the file, so it does not need to know the server
     return args.func(Gitea(getattr(args, "url", None), require_url=args.command != "logout"), args)
 
-
-def run():
-    return runner.run(main)
