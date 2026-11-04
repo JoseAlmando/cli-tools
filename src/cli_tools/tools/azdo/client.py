@@ -1,10 +1,11 @@
 import base64
+import json
 import os
 import re
 import urllib.parse
 from pathlib import Path
 
-from cli_tools.core import credentials, http, output
+from cli_tools.core import api, credentials, http, output
 from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 
 PROG = "clt azdo"
@@ -103,3 +104,36 @@ class AzureDevOps:
 
     def call(self, method, path, body):
         return self.request(method, path, body, self.load_credentials()["token"])
+
+
+def items_key(data):
+    return "value" if isinstance(data, dict) and isinstance(data.get("value"), list) else None
+
+
+def next_page(headers, body=None, path=None):
+    if path is None:
+        return None
+    params = dict(urllib.parse.parse_qsl(path.partition("?")[2], keep_blank_values=True))
+    token = {name.lower(): value for name, value in (headers or {}).items()}.get("x-ms-continuationtoken")
+    if token:
+        return api.set_query(path, {"continuationToken": token}) if token != params.get("continuationToken") else None
+    try:
+        data = json.loads(body) if body else None
+    except ValueError:
+        return None
+    top, skip = params.get("$top", ""), params.get("$skip", "0") or "0"
+    key = items_key(data)
+    if key is None or not top.isdigit() or not skip.isdigit() or int(top) == 0 or len(data[key]) < int(top):
+        return None
+    return api.set_query(path, {"$skip": int(skip) + int(top)})
+
+
+def join(pages):
+    key = items_key(pages[0])
+    if key is None:
+        return [item for page in pages for item in (page if isinstance(page, list) else [page])]
+    joined = dict(pages[0])
+    joined[key] = [item for page in pages if isinstance(page, dict) for item in page.get(key) or []]
+    if "count" in joined:
+        joined["count"] = len(joined[key])
+    return joined
