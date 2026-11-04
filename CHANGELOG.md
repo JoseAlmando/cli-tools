@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0 - 2026-11-04
+
+### Breaking changes
+
+- feat!: clt as the only command, with short aliases
+
+### Features
+
+- feat(azdo): Azure DevOps client with PAT, api-version and JSON Patch
+- feat(azdo): follow continuation tokens and $top/$skip pages
+- feat(azdo): login, logout, me, token and api commands
+- feat(azdo): clt ad and the short command names
+
+### Fixes
+
+- fix(azdo): stop on repeated pages, quote $ in help, clear bad-token message
+- fix(azdo): logout keeps the organization, and say which token wins
+
+### Other
+
+- docs: clt as the only command, and its short names
+- ci: run the smoke test through clt and its short names
+- docs: uv tool install -e installs only clt
+- docs: plan for the Azure DevOps client
+- refactor(http): share the typed-path encoding
+- docs: Azure DevOps in the README, architecture and the skill's recipes
+- docs(azdo): recipes from the first real run
+- docs(azdo): keep the recipes under the size limit
+
 ## 0.4.0 - 2026-11-04
 
 ### Features
