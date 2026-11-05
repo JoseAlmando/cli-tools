@@ -16,6 +16,37 @@ description: Use the clt command-line tools (clt taiga, clt gitea, clt github, c
 
 MCP servers for Jira and Azure DevOps are set up by the user with `clt jira mcp` / `clt azdo mcp`; never run those yourself. When one is connected, prefer clt for anything a recipe here covers: it is checked, paged and read-only when you ask.
 
+## Find the task here first
+
+Look the task up in this table before searching the web, the API docs or the code: the command is ready, checked and
+small. Writes are shown with `--dry-run`; drop it only after the user agrees. The reference named in the last column
+has the rest (bodies, follow-up steps, mistakes to avoid). Search elsewhere only for what is in neither.
+
+| Task | Command | More |
+|---|---|---|
+| Who am I on a service | `clt <tool> --json --read-only me` | |
+| Azure DevOps: list projects | `clt azdo --json --read-only GET _apis/projects --fields id,name --all` | `references/azure-devops.md` |
+| Azure DevOps: list a project's repositories | `clt azdo --json --read-only GET "<project>/_apis/git/repositories" --fields id,name,defaultBranch` | `references/azure-devops.md` |
+| Azure DevOps: read a work item | `clt azdo --json --read-only GET '_apis/wit/workitems/<id>?$expand=relations' --fields id,fields,relations` | `references/azure-devops.md` |
+| Azure DevOps: query work items (WIQL) | `clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --dry-run` | `references/azure-devops.md` |
+| Azure DevOps: move a work item | `clt azdo --json PATCH _apis/wit/workitems/<id> -d '[{"op": "add", "path": "/fields/System.State", "value": "Active"}]' --dry-run` | `references/azure-devops.md` |
+| Azure DevOps: list active pull requests | `clt azdo --json --read-only GET '<project>/_apis/git/repositories/<repo>/pullrequests?searchCriteria.status=active&$top=50' --fields pullRequestId,title,sourceRefName,targetRefName --all` | `references/azure-devops.md` |
+| Azure DevOps: create, comment on, vote on or complete a pull request | see the reference | `references/azure-devops.md` |
+| Jira: read a ticket | `clt jira --json --read-only issue PROJ-123` | `references/jira.md` |
+| Jira: my open tickets | `clt jira --json --read-only GET "search/jql?jql=assignee=currentUser() AND statusCategory!=Done ORDER BY updated DESC&fields=key,summary,status" --fields key,fields.summary,fields.status.name --all --max-items 50` | `references/jira.md` |
+| Jira: move a ticket | `clt jira --json --read-only GET issue/PROJ-123/transitions --fields transitions`, then the `POST` in the reference | `references/jira.md` |
+| Jira: comment or assign | see the reference (comments are ADF) | `references/jira.md` |
+| GitHub: my repositories | `clt github --json --read-only GET "user/repos?per_page=100&sort=pushed" --fields full_name,private,default_branch --all` | `references/github.md` |
+| GitHub: open issues | `clt github --json --read-only GET "repos/<owner>/<repo>/issues?state=open&per_page=100" --fields number,title,user.login,pull_request.url --all` | `references/github.md` |
+| GitHub: open pull requests | `clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open&per_page=100" --fields number,title,head.ref,base.ref --all` | `references/github.md` |
+| GitHub: CI of a commit | `clt github --json --read-only GET "repos/<owner>/<repo>/commits/<sha>/check-runs" -r \| jq -c '.check_runs[] \| {name, status, conclusion}'` | `references/github.md` |
+| GitHub: open an issue or a pull request, comment, review, merge | see the reference | `references/github.md` |
+| Gitea: open pull requests | `clt gitea --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title,head.ref,base.ref,mergeable --all` | Gitea recipes below |
+| Gitea: open a pull request | see the recipe below | Gitea recipes below |
+| Taiga: read an issue or a user story by its number | `clt taiga --json --read-only GET "issues/by_ref?ref=<ref>&project=<project-id>" --fields id,ref,subject,status_extra_info.name,version` | Taiga recipes below |
+| Taiga: change an issue's status | `clt taiga --json PATCH issues/<id> -d '{"status": <status-id>, "version": <version>}' --dry-run` | Taiga recipes below |
+| Cut or publish a release | `clt release --json --dry-run --bump <fix\|feat\|major>` | Releases below |
+
 ## Command shape
 
 ```bash
@@ -71,13 +102,11 @@ clt gitea --json POST "repos/<owner>/<repo>/pulls" -d @pr.json --dry-run
 clt gitea --json POST "repos/<owner>/<repo>/pulls" -d @pr.json --fields number,html_url,mergeable
 ```
 
-## GitHub recipes
+## GitHub
 
-```bash
-clt github --json --read-only me
-clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title,head.ref,base.ref --all
-clt github --json --read-only GET "repos/<owner>/<repo>/releases" --fields tag_name,name,html_url --max-items 10
-```
+`clt github` calls `https://api.github.com/`. **Read [`references/github.md`](references/github.md) before any GitHub
+call beyond the table above**: issues, pull requests, CI checks, reviews, merging, releases and project boards, and
+what agents get wrong (wrapped lists such as `check_runs` need `-r` and `jq`).
 
 ## Jira
 
