@@ -23,7 +23,7 @@ where = ["src"]
 cli_tools = ["skill/*.md", "skill/references/*.md"]
 
 [dependency-groups]
-dev = ["ruff"]
+dev = ["ruff==0.17.3"]
 
 [tool.ruff]
 line-length = 120

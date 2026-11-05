@@ -102,7 +102,7 @@ Put it in `src/cli_tools/commands/` (a module, or a package when it needs helper
 ```bash
 uv tool install -e .                                        # clt, taiga and gitea run this checkout
 PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
-uvx ruff check .                                            # lint (Ruff is a development dependency only)
+uvx ruff@0.17.3 check .                                            # lint (Ruff is a development dependency only)
 ```
 
 The tests use `unittest` and never reach the network or a real server; `test_contracts.py` pins the public behaviour (help, exit codes, `--json` shapes, flags, credential locations) through the entry points declared in `pyproject.toml`. Ruff's settings are in `pyproject.toml` (`[tool.ruff]`): the `E`, `F`, `W`, `I`, `B` and `UP` rules for Python 3.9, with lines up to about 120 columns. The code is not run through `ruff format`.
