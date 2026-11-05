@@ -3,6 +3,8 @@ import io
 import json
 import os
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -10,6 +12,19 @@ from cli_tools import __version__, skill_dir
 from cli_tools.core import context, errors
 from cli_tools.core.errors import ToolError
 from tests.helpers import TempConf
+
+
+def can_link():
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            (Path(tmp) / "link").symlink_to(tmp, target_is_directory=True)
+        except OSError:
+            return False
+    return True
+
+
+# Windows creates links only with Developer Mode or as an administrator
+NEEDS_LINKS = unittest.skipUnless(can_link(), "this system does not let this user create symbolic links")
 
 
 def skill():
@@ -85,6 +100,8 @@ class SkillCommandTests(TempConf):
                     shutil.rmtree(own)
                     own.write_text("a file")
                 if setup == "link":
+                    if not can_link():
+                        self.skipTest("this system does not let this user create symbolic links")
                     own.unlink()
                     own.symlink_to(other, target_is_directory=True)
                 for action in (("install", "--agent", "claude"), ("uninstall", "--agent", "claude")):
@@ -141,6 +158,7 @@ class SkillCommandTests(TempConf):
         self.assertIn(".clt-skill", err)
         self.assertEqual((self.agents() / "SKILL.md").read_text(), "by hand")
 
+    @NEEDS_LINKS
     def test_link(self):
         _, result, _ = self.run_skill("install", "--agent", "claude", "--link")
         self.assertTrue(self.claude().is_symlink())
@@ -155,6 +173,7 @@ class SkillCommandTests(TempConf):
                 self.assertRaisesRegex(ToolError, "without --link"):
             self.run_skill("install", "--agent", "claude", "--link")
 
+    @NEEDS_LINKS
     def test_uninstall_removes_only_clt_targets(self):
         self.run_skill("install", "--agent", "claude")
         self.run_skill("install", "--agent", "codex", "--link")
@@ -171,6 +190,7 @@ class SkillCommandTests(TempConf):
         _, _, err = self.run_skill("uninstall", "--agent", "codex")
         self.assertIn("gemini", err.lower())
 
+    @NEEDS_LINKS
     def test_refresh_recopies_marked_copies_only(self):
         _, result, _ = self.run_skill("refresh")
         self.assertEqual(result, {"action": "refresh", "targets": []})
