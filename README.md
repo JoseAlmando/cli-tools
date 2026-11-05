@@ -26,10 +26,13 @@ uv tool install git+https://github.com/JoseAlmando/cli-tools          # or: pipx
 To move to another version later:
 
 ```bash
-clt update --check          # installed and latest version
+clt update --check          # installed and latest version, and what the newer ones bring
 clt update                  # the latest release
 clt update 0.2.0            # a given one, older ones included
 ```
+
+Before installing a newer version, `clt update` lists what each release in between brings (breaking changes, features
+and fixes, from the release notes).
 
 On Windows the update finishes in the background a few seconds after `clt update` returns. To uninstall: `uv tool uninstall cli-tools`.
 
