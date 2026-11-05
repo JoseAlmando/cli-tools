@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.0 - 2026-11-04
+
+### Features
+
+- feat(skill): install clt's skill for Claude Code, Codex and Gemini CLI
+- feat(update): refresh the installed skill copies after an update
+- feat(mcp): connect the official Jira and Azure DevOps MCP servers to an agent
+- feat(update): show what each newer release brings
+
+### Fixes
+
+- fix(skill,mcp): safe swap of the skill copy, clear agent failures
+- fix(skill,mcp): findings from the first real run
+
+### Other
+
+- docs: plan for the agent setup commands
+- refactor: ship the skill inside the package
+- docs: MCP setup and skill install
+- ci: check the packaged skill installs
+- docs: Gemini's MCP sign-in step, and the skill's new home in the PR checklist
+- test(skill): skip the link tests where links cannot be made
+
 ## 0.5.0 - 2026-11-04
 
 ### Breaking changes
