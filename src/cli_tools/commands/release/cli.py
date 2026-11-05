@@ -61,7 +61,7 @@ def test_command(root, config, kind):
     if command:
         if not isinstance(command, list) or not all(isinstance(a, str) for a in command):
             raise ToolError(f"{CONFIG_FILE}: release.test_command must be a list of strings")
-        # "python" means the project's interpreter, so one .clt.json works where only python3 or py exists
+        # "python" means the project's interpreter, so one .clt.json works where only python3 exists
         return ([_interpreter(root)] + command[1:] if command[0] == "python" else list(command)), env
     if kind == "python":
         module = ["-m", "pytest"] if _uses_pytest(root) else ["-m", "unittest", "discover"]
