@@ -158,7 +158,10 @@ def cmd_issue(jira, args):
 
 
 MCP_URL = "https://mcp.atlassian.com/v1/mcp"
-MCP_THEN = {"claude": "/mcp in Claude Code to sign in", "codex": "codex mcp login atlassian",
+MCP_EPILOG = (f"Atlassian's remote server, {MCP_URL}. You sign in with OAuth in the browser, and your Atlassian "
+              "organization must allow the app; Codex starts the sign-in as soon as the server is added.")
+MCP_THEN = {"claude": "/mcp in Claude Code to sign in",
+            "codex": "sign in when the browser opens (later: codex mcp login atlassian)",
             "gemini": "/mcp auth atlassian in Gemini CLI"}
 
 
@@ -219,7 +222,8 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
     p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
     p.set_defaults(func=cmd_issue)
-    mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Atlassian's MCP server to an agent")
+    mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Atlassian's MCP server to an agent",
+                       MCP_EPILOG)
     api.add_api_parser(sub, prog, "issue/<KEY>",
                        lambda j, args: api.run_api(args, j.call, args.ctx, client.next_page, client.items_key,
                                                    client.join), api_prefix=API_PREFIX)

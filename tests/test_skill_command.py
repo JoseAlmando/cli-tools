@@ -125,6 +125,22 @@ class SkillCommandTests(TempConf):
         with self.assertRaises(ToolError):
             self.run_skill("install", "--agent", "claude")
 
+    def test_the_refusal_says_where_to_move_it(self):
+        self.agents().mkdir(parents=True)
+        with self.assertRaises(ToolError) as caught:
+            self.run_skill("install", "--agent", "codex")
+        self.assertIn("out of", str(caught.exception))
+        self.assertIn(str(self.home / ".agents" / "clt.bak"), str(caught.exception))
+
+    def test_refresh_warns_about_unmarked_copies(self):
+        self.agents().mkdir(parents=True)
+        (self.agents() / "SKILL.md").write_text("by hand")
+        _, result, err = self.run_skill("refresh")
+        self.assertEqual(result["targets"], [])
+        self.assertIn(str(self.agents()), err)
+        self.assertIn(".clt-skill", err)
+        self.assertEqual((self.agents() / "SKILL.md").read_text(), "by hand")
+
     def test_link(self):
         _, result, _ = self.run_skill("install", "--agent", "claude", "--link")
         self.assertTrue(self.claude().is_symlink())

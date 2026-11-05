@@ -28,7 +28,8 @@ def is_clt(path):
 
 def _check(path):
     if (path.exists() or path.is_symlink()) and not is_clt(path):
-        raise ToolError(f"{path} exists and is not clt's skill; move it away first, then run this again")
+        raise ToolError(f"{path} exists and is not clt's skill; move it out of {path.parent} (for example to "
+                        f"{path.parent.parent / 'clt.bak'}, where agents do not read it), then run this again")
 
 
 def _remove(path):
@@ -109,7 +110,7 @@ def uninstall(agents):
 
 
 def refresh():
-    done, results = set(), []
+    done, warned, results = set(), set(), []
     for agent in AGENTS:
         path = target(agent)
         if path not in done and not path.is_symlink() and (path / MARKER).is_file():
@@ -117,6 +118,10 @@ def refresh():
             done.add(path)
         if path in done:
             results.append({"agent": agent, "path": str(path), "how": "copy"})
+        elif path not in warned and path.is_dir() and not path.is_symlink():
+            warned.add(path)
+            info(output.err.yellow(f"{path} has no {MARKER}, so it was not refreshed (a copy made by hand?); move it "
+                                   f"out of {path.parent} and run clt skill install --agent {agent}."))
     return results
 
 

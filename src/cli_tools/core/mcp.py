@@ -39,7 +39,7 @@ def shown(command):
 
 
 def add_mcp_parser(sub, func, help_text, epilog=None):
-    p = sub.add_parser("mcp", help=help_text, epilog=epilog)
+    p = sub.add_parser("mcp", help=help_text, description=help_text, epilog=epilog)
     p.add_argument("--agent", required=True, choices=AGENTS, help="the agent to connect the server to")
     p.add_argument("--install", action="store_true", help="run the command instead of printing it")
     p.set_defaults(func=func)
@@ -52,13 +52,14 @@ def run_mcp(args, ctx, command, then):
         program = shutil.which(command[0])
         if not program:
             raise ToolError(f"{command[0]} is not on the PATH; run this where it is:\n  {shown(command)}")
+        info(output.err.dim(f"{command[0]} may open the browser to sign in; this waits until you finish there."))
         code = subprocess.run([program, *command[1:]], stdout=sys.stderr if ctx.json_mode else None).returncode
         if code:
             raise ToolError(f"{command[0]} exited {code}; the command was:\n  {shown(command)}")
     if ctx.json_mode:
         print(json.dumps({"agent": args.agent, "command": command, "then": then, "installed": args.install}))
     elif not args.install:
-        print(shown(command))
+        print(shown(command), flush=True)
         info(output.err.dim(f"then: {then}"))
     else:
         info(output.err.green("✓ ") + f"Added to {args.agent}; then: {then}")

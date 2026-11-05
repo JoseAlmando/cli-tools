@@ -85,6 +85,39 @@ class ToolMcpTests(TempConf):
         self.assertIsNotNone(self.run_.call_args[1].get("stdout"))
         self.assertTrue(json.loads(out)["installed"])
 
+    def test_install_warns_that_the_browser_may_open(self):
+        self.found["codex"] = "/bin/codex"
+        _, _, err = self.clt("jira", "mcp", "--agent", "codex", "--install")
+        self.assertIn("browser", err)
+
+    def test_then_comes_after_the_command(self):
+        events = []
+
+        class Stream(io.StringIO):
+            def __init__(self, name):
+                super().__init__()
+                self.name = name
+
+            def write(self, text):
+                events.append((self.name, text))
+                return super().write(text)
+
+            def flush(self):
+                events.append((self.name, "flush"))
+
+        from cli_tools import cli
+        with mock.patch("sys.stdout", Stream("out")), mock.patch("sys.stderr", Stream("err")):
+            cli.main(["jira", "mcp", "--agent", "codex"], ctx=context.CLIContext())
+        first_err = next(i for i, (name, _) in enumerate(events) if name == "err")
+        self.assertIn(("out", "flush"), events[:first_err])
+
+    def test_jira_mcp_help_names_the_server(self):
+        from cli_tools.tools.jira import cli
+        with contextlib.redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit):
+            cli.main(["mcp", "--help"])
+        self.assertIn(ATLASSIAN, out.getvalue())
+        self.assertIn("OAuth", out.getvalue())
+
     def test_install_without_the_cli(self):
         with self.assertRaisesRegex(ToolError, "gemini mcp add"):
             self.clt("jira", "mcp", "--agent", "gemini", "--install")
