@@ -65,7 +65,7 @@ class VersionFile:
             return _python_span(text)
         if self.kind == "dotnet":
             return _dotnet_span(text)
-        stripped = text.strip()
+        stripped = text.strip().lstrip("﻿").strip()
         if not stripped:
             return None
         start = text.index(stripped)
@@ -102,15 +102,15 @@ def _has_dotnet_version(path):
 
 
 def _project_table(text):
-    return re.search(r"^\[project\][ \t]*\r?$(.*?)(?=^\[|\Z)", text, re.M | re.S)
+    return re.search(r"^﻿?\[project\][ \t]*\r?$(.*?)(?=^\[|\Z)", text, re.M | re.S)
 
 
 def _python_span(text):
     table = _project_table(text)
-    found = table and re.search(r'^version\s*=\s*"([^"]*)"', table.group(1), re.M)
+    found = table and re.search(r"""^version\s*=\s*(["'])([^"'\r\n]*)\1""", table.group(1), re.M)
     if not found:
         return None
-    return table.start(1) + found.start(1), table.start(1) + found.end(1)
+    return table.start(1) + found.start(2), table.start(1) + found.end(2)
 
 
 def _dotnet_span(text):
