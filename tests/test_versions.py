@@ -42,6 +42,23 @@ class FindVersionFileTests(unittest.TestCase):
         found.write("1.3.0")
         self.assertEqual(path.read_text(), PYPROJECT.replace('version = "1.2.3"', 'version = "1.3.0"'))
 
+    def test_a_single_quoted_python_version_is_read_and_written(self):
+        path = self.write("pyproject.toml", "[project]\nname = 'demo'\nversion = '1.2.3'\n")
+        found = versions.find_version_file(self.root)
+        self.assertEqual(found.read(), "1.2.3")
+        found.write("1.3.0")
+        self.assertEqual(path.read_text(), "[project]\nname = 'demo'\nversion = '1.3.0'\n")
+
+    def test_a_byte_order_mark_is_read_and_kept(self):
+        for name, text in (("VERSION", "﻿1.2.3\n"), ("pyproject.toml", '﻿[project]\nversion = "1.2.3"\n')):
+            with self.subTest(name=name):
+                path = self.write(name, text)
+                found = versions.find_version_file(self.root, override=name if name == "VERSION" else None)
+                self.assertEqual(found.read(), "1.2.3")
+                found.write("1.3.0")
+                self.assertEqual(path.read_bytes(), text.replace("1.2.3", "1.3.0").encode("utf-8"))
+                path.unlink()
+
     def test_a_dynamic_python_version_suggests_version_file(self):
         self.write("pyproject.toml", '[project]\nname = "demo"\ndynamic = ["version"]\n')
         with self.assertRaisesRegex(ToolError, "--version-file"):
