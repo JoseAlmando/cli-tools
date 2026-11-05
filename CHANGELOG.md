@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - 2026-11-05
+
+### Features
+
+- feat(skill): recommend installing the skill for the agents found without it
+
 ## 0.7.0 - 2026-11-04
 
 ### Features
