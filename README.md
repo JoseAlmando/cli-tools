@@ -133,7 +133,7 @@ Every tool can run unattended:
 
 `--json` and `--read-only` can go anywhere on the command line.
 
-clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules and has recipes for the common Taiga, Gitea and GitHub calls, plus `references/jira.md` and `references/azure-devops.md`, which an agent reads only when it works with Jira or Azure DevOps. Install it where your agents read skills:
+clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules, opens with a table of common tasks and the exact command for each (so an agent does not search for them), and has recipes for Taiga and Gitea, plus `references/github.md`, `references/jira.md` and `references/azure-devops.md`, which an agent reads only when it works with that service. Install it where your agents read skills:
 
 ```bash
 clt skill install                    # for every agent CLI on the PATH (claude, codex, gemini)

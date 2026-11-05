@@ -105,6 +105,6 @@ jobs:
           home="$RUNNER_TEMP/home"
           HOME="$home" USERPROFILE="$home" clt skill install --agent codex
           if [ "$RUNNER_OS" = Windows ]; then home="$(cygpath -u "$home")"; fi
-          for file in SKILL.md references/jira.md references/azure-devops.md .clt-skill; do
+          for file in SKILL.md references/github.md references/jira.md references/azure-devops.md .clt-skill; do
             test -f "$home/.agents/skills/clt/$file" || { echo "::error::$file missing from the installed skill"; exit 1; }
           done

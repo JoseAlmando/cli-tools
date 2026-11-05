@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "src" / "cli_tools" / "skill"
-REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md"}
+REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md", "github": "references/github.md"}
 COMMANDS = {"login", "me", "issue", "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
 WRITES = ("POST", "PUT", "PATCH", "DELETE")
 FLAGS = {"--json", "--read-only"}
@@ -67,6 +67,21 @@ class SkillTests(unittest.TestCase):
                             dry_runs.add((words[0], words[1]))
                         else:
                             self.assertIn((words[0], words[1]), dry_runs)
+
+    def test_the_task_table_is_safe_and_points_to_real_references(self):
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        table = re.search(r"## Find the task here first\n(.*?)\n## ", text, re.S).group(1)
+        rows = [line for line in table.splitlines() if line.startswith("| ") and not line.startswith("| Task")]
+        self.assertGreater(len(rows), 10)
+        for row in rows:
+            with self.subTest(row=row):
+                for command in re.findall(r"`(clt (?!<tool>)[^`]+)`", row.replace("\\|", "|")):
+                    self.assertIn("--json", command)
+                    if command.split()[1] != "release":
+                        method = command_words(command.split(" | ")[0])[0]
+                        self.assertIn("--dry-run" if method in WRITES else "--read-only", command)
+                for reference in re.findall(r"`(references/[^`]+)`", row):
+                    self.assertTrue((SKILL / reference).is_file(), reference)
 
 
 if __name__ == "__main__":
