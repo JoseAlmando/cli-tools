@@ -7,17 +7,14 @@ from pathlib import Path
 
 from cli_tools import __version__, skill_dir
 from cli_tools.core import context, output
+from cli_tools.core.agents import SKILL_FOLDERS, skill_target
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
 
-AGENTS = {"claude": (".claude", "skills", "clt"), "codex": (".agents", "skills", "clt"),
-          "gemini": (".agents", "skills", "clt")}
+AGENTS = SKILL_FOLDERS
 MARKER = ".clt-skill"
 SOURCES = (("skills", "clt"), ("cli_tools", "skill"))
-
-
-def target(agent):
-    return Path.home().joinpath(*AGENTS[agent])
+target = skill_target
 
 
 def is_clt(path):
