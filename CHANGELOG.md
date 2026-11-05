@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1 - 2026-11-04
+
+### Fixes
+
+- fix(release): read single-quoted and BOM-prefixed versions
+
+### Other
+
+- docs(release): drop the py launcher claim from a comment
+- docs(github): describe the browser login next to the token
+- ci: pin Ruff to 0.17.3
+
 ## 0.6.0 - 2026-11-04
 
 ### Features
