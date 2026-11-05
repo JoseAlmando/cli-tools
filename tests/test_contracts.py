@@ -33,7 +33,7 @@ usage: clt TOOL [arguments]
 tools:
   taiga, t     client for the Taiga API
   gitea, gt    client for the Gitea API, with OAuth2 login in the browser
-  github, gh   client for the GitHub API, with a personal access token
+  github, gh   client for the GitHub API, with a browser login or a token
   jira, j      client for the Jira Cloud API, with an API token
   azdo, ad     client for the Azure DevOps Services API, with a personal access token
   release      bump the version, update the changelog, tag and publish a release
