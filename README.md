@@ -150,7 +150,7 @@ clt jira mcp --agent claude --install
 clt azdo mcp --agent codex --org <org>      # Microsoft's local server, npx @azure-devops/mcp (Node.js 20+)
 ```
 
-The agent asks you to sign in the first time it uses the server (`codex mcp login atlassian`, `/mcp` in Claude Code, `/mcp auth atlassian` in Gemini CLI); `clt jira mcp` prints the step for your agent. Azure DevOps opens the browser on first use.
+Atlassian's server signs you in with OAuth in the browser, and your Atlassian organization must allow it: Codex starts the sign-in as soon as the server is added (later, `codex mcp login atlassian`), Claude Code with `/mcp`, Gemini CLI with `/mcp auth atlassian`; `clt jira mcp` prints the step for your agent. Azure DevOps opens the browser the first time the agent uses it. A copy of the skill made by hand is never overwritten: move it out of the skills folder first, and `clt skill refresh` says when it finds one.
 
 ## Configuration
 
