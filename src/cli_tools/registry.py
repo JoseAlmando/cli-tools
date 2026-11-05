@@ -6,7 +6,7 @@ line here."""
 TOOLS = (
     ("taiga", "cli_tools.tools.taiga.cli", "client for the Taiga API"),
     ("gitea", "cli_tools.tools.gitea.cli", "client for the Gitea API, with OAuth2 login in the browser"),
-    ("github", "cli_tools.tools.github.cli", "client for the GitHub API, with a personal access token"),
+    ("github", "cli_tools.tools.github.cli", "client for the GitHub API, with a browser login or a token"),
     ("jira", "cli_tools.tools.jira.cli", "client for the Jira Cloud API, with an API token"),
     ("azdo", "cli_tools.tools.azdo.cli", "client for the Azure DevOps Services API, with a personal access token"),
     ("release", "cli_tools.commands.release.cli", "bump the version, update the changelog, tag and publish a release"),
