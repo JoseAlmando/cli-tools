@@ -193,7 +193,7 @@ No server is configured by default. Each tool takes it, in this order:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
-uvx ruff check .                                            # the linter, a development tool only
+uvx ruff@0.17.3 check .                                            # the linter, a development tool only
 ```
 
 **Contributing:** commit messages and branch names follow Conventional Commits and Conventional Branch; see [CONTRIBUTING.md](CONTRIBUTING.md).

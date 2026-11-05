@@ -38,7 +38,7 @@ publish) and `clt update` (self-update). It is a Python package with **no runtim
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -t .                              # all tests
 PYTHONPATH=src uv run --no-project --python 3.9 python -m unittest discover -s tests -t .  # oldest Python
-uvx ruff check .                                                                       # lint
+uvx ruff@0.17.3 check .                                                                       # lint
 python scripts/check_private_words.py                                                  # private words
 ```
 

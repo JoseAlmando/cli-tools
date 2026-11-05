@@ -15,7 +15,7 @@ Before you open a pull request:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
-uvx ruff check .                                            # the linter
+uvx ruff@0.17.3 check .                                            # the linter
 ```
 
 The code uses the standard library only and runs on Python 3.9 and later, on Linux, macOS and Windows. The tests never reach the network. [`docs/architecture.md`](docs/architecture.md) explains how the code is organized.
