@@ -10,7 +10,10 @@ from cli_tools.core import errors, http
 from cli_tools.core.errors import ToolError
 from tests.helpers import TempConf
 
-RELEASES = json.dumps([{"tag_name": "v0.2.0"}, {"tag_name": "v0.10.0"}, {"tag_name": "v0.1.0"}, {"tag_name": "nightly"}])
+NOTES_10 = "### Breaking changes\n\n- feat!: drop a flag\n\n### Features\n\n- feat: ten\n\n### Other\n\n- docs: ten"
+NOTES_2 = "### Fixes\n\n- fix: two\n\n### Other\n\n- ci: two"
+RELEASES = json.dumps([{"tag_name": "v0.2.0", "body": NOTES_2}, {"tag_name": "v0.10.0", "body": NOTES_10},
+                       {"tag_name": "v0.1.0", "body": "### Features\n\n- feat: one"}, {"tag_name": "nightly"}])
 INSTALLED = {"installed": True, "editable": False, "path": None}
 
 
@@ -46,7 +49,9 @@ class UpdateTests(TempConf):
 
     def test_check_reports_and_installs_nothing_even_read_only(self):
         _, out, _ = self.update("--check", env={"CLT_JSON": "1", "CLT_READONLY": "1"})
-        self.assertEqual(json.loads(out), {"installed": "0.2.0", "latest": "0.10.0", "target": None, "action": "check"})
+        self.assertEqual(json.loads(out), {"installed": "0.2.0", "latest": "0.10.0", "target": None, "action": "check",
+                                           "changes": [{"version": "0.10.0", "notes": "### Breaking changes\n\n"
+                                                        "- feat!: drop a flag\n\n### Features\n\n- feat: ten"}]})
         self.run_.assert_not_called()
 
     def test_a_development_install_is_left_alone(self):
@@ -116,6 +121,33 @@ class UpdateTests(TempConf):
         with mock.patch.object(update, "on_windows", lambda: True):
             _, _, err = self.update()
         self.assertIn("clt skill refresh", err)
+
+    def test_check_shows_what_the_new_versions_bring_newest_first(self):
+        with mock.patch.object(update, "installed_version", lambda: "0.1.0"):
+            _, _, err = self.update("--check")
+        self.assertLess(err.index("0.10.0"), err.index("feat: ten"))
+        self.assertLess(err.index("feat: ten"), err.index("fix: two"))
+        self.assertIn("Breaking changes", err)
+        self.assertNotIn("Other", err)
+        self.assertNotIn("docs: ten", err)
+        self.assertNotIn("feat: one", err)
+
+    def test_an_update_shows_the_changes_before_installing(self):
+        _, _, err = self.update()
+        self.assertLess(err.index("feat: ten"), err.index("Installing clt 0.10.0"))
+        self.assertNotIn("fix: two", err)
+
+    def test_a_downgrade_or_the_same_version_shows_no_changes(self):
+        for argv in (["0.1.0"], ["0.2.0"]):
+            _, out, err = self.update(*argv, env={"CLT_JSON": "1"})
+            self.assertNotIn("feat:", err)
+            self.assertEqual(json.loads(out)["changes"], [])
+
+    def test_a_local_version_suffix_still_finds_the_changes(self):
+        with mock.patch.object(update, "installed_version", lambda: "0.2.0+d1db646"):
+            _, _, err = self.update("--check")
+        self.assertIn("feat: ten", err)
+        self.assertNotIn("fix: two", err)
 
     def test_read_only_blocks_an_update(self):
         with self.assertRaises(errors.ReadOnlyError):
