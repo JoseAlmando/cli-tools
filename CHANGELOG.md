@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 - 2026-11-04
+
+### Features
+
+- feat(skill): a task table with ready commands, and GitHub recipes
+
 ## 0.6.1 - 2026-11-04
 
 ### Fixes
