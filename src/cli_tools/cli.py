@@ -3,7 +3,7 @@ import importlib
 import sys
 
 from cli_tools import __version__, registry
-from cli_tools.core import context, runner
+from cli_tools.core import agents, context, runner
 from cli_tools.core.errors import ToolError
 
 
@@ -28,6 +28,7 @@ def usage():
 def main(argv, ctx=None):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(usage())
+        agents.recommend_skill(ctx or context.CLIContext.from_env())
         return 0 if argv else 2
     if argv[0] in ("-V", "--version"):
         print(f"clt {__version__}")

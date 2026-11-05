@@ -11,7 +11,7 @@ import urllib.request
 from importlib import metadata
 
 from cli_tools import __version__
-from cli_tools.core import context, http, output
+from cli_tools.core import agents, context, http, output
 from cli_tools.core.errors import ToolError
 from cli_tools.core.output import info
 from cli_tools.tools.github.client import API_ROOT, HEADERS
@@ -149,6 +149,7 @@ def main(argv, ctx=None, prog="clt update"):
     code = subprocess.run(command).returncode
     if code == 0:
         refresh_skill()
+        agents.recommend_skill(ctx)
     report(ctx, installed, available[0], target, "installed" if code == 0 else "failed", notes)
     return code
 

@@ -106,6 +106,15 @@ class UpdateTests(TempConf):
         self.assertEqual(self.run_.call_args_list[1][0][0], ["/x/clt", "skill", "refresh"])
         self.assertIsNotNone(self.run_.call_args_list[1][1].get("stdout"))
 
+    def test_a_successful_update_recommends_the_skill_for_agents_without_it(self):
+        with mock.patch.object(update.agents, "recommend_skill") as recommend:
+            self.update()
+        recommend.assert_called_once()
+        self.run_.return_value = mock.Mock(returncode=7)
+        with mock.patch.object(update.agents, "recommend_skill") as recommend:
+            self.update()
+        recommend.assert_not_called()
+
     def test_a_failed_update_refreshes_nothing(self):
         self.run_.return_value = mock.Mock(returncode=7)
         self.update()

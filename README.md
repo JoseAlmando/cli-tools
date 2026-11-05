@@ -21,7 +21,11 @@ From GitHub, the latest release (or a given one with `@vX.Y.Z`):
 
 ```bash
 uv tool install git+https://github.com/JoseAlmando/cli-tools          # or: pipx install git+https://…
+clt skill install                                                     # teach your AI agents to use clt (optional)
 ```
+
+`clt --help` and `clt update` remind you of the second step when they find Claude Code, Codex or Gemini CLI without
+clt's skill (see [For scripts and AI agents](#for-scripts-and-ai-agents)).
 
 To move to another version later:
 

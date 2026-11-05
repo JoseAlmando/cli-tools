@@ -19,6 +19,7 @@ src/cli_tools/
 │   ├── credentials.py   credential files: 0600 in a 0700 folder, written atomically
 │   ├── api.py           the api command: METHOD path [-d JSON], --all, --fields, --max-items, --dry-run
 │   ├── mcp.py           the mcp command: an agent's "mcp add" command for an HTTP or stdio server, printed or run
+│   ├── agents.py        where each agent CLI reads skills, and the hint to install clt's (used by clt --help)
 │   └── runner.py        run(main): global flags, then errors turned into messages and exit codes
 ├── tools/               the API clients, one package each
 │   ├── taiga/           client.py (server, session, token renewal) and cli.py (commands, main, run)
@@ -65,6 +66,7 @@ Dependencies go one way:
 | `credentials` | `write_private_json(path, data)` and `read_json_file(path)` for the saved session. |
 | `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page, items_key, join)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. A tool passes `next_page(headers, body, path)` when the next page is in the body, `items_key(data)` when lists come inside an object (`{"issues": [...]}`) so `--fields` and `--max-items` reach them, and `join(pages)` to merge pages into that object. `set_query(path, params)` sets or removes query parameters of a relative path. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. |
 | `runner` | `run(main)`, for the `clt` console script. |
+| `agents` | `skill_target(agent)`, where an agent CLI reads clt's skill; `recommend_skill(ctx)` prints how to install it for the agents on the PATH that have none (only for a person: not with `--json`, not without a terminal). |
 
 ## Adding a tool
 

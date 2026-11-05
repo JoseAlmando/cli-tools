@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from cli_tools import __version__, skill_dir
-from cli_tools.core import context, errors
+from cli_tools.core import agents, context, errors
 from cli_tools.core.errors import ToolError
 from tests.helpers import TempConf
 
@@ -202,6 +202,42 @@ class SkillCommandTests(TempConf):
                          (skill_dir() / "SKILL.md").read_text(encoding="utf-8"))
         self.assertTrue(self.agents().is_symlink())
         self.assertEqual([t["agent"] for t in result["targets"]], ["claude"])
+
+    def help_hint(self, ctx=None, tty=True):
+        from cli_tools import cli
+
+        class Err(io.StringIO):
+            def isatty(self):
+                return tty
+
+        out, err = io.StringIO(), Err()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            cli.main(["--help"], ctx=ctx or context.CLIContext())
+        return out.getvalue(), err.getvalue()
+
+    def test_missing_lists_agents_on_the_path_without_any_skill_copy(self):
+        self.on_path = {"claude", "codex", "gemini"}
+        self.assertEqual(agents.without_skill(), ["claude", "codex", "gemini"])
+        self.run_skill("install", "--agent", "codex")
+        self.assertEqual(agents.without_skill(), ["claude"])
+        self.claude().mkdir(parents=True)
+        self.assertEqual(agents.without_skill(), [])
+        self.on_path = set()
+        shutil.rmtree(self.claude())
+        self.assertEqual(agents.without_skill(), [])
+
+    def test_help_recommends_installing_the_skill_on_stderr(self):
+        self.on_path = {"claude", "codex"}
+        out, err = self.help_hint()
+        self.assertIn("clt skill install --agent claude --agent codex", err)
+        self.assertNotIn("clt skill install", out)
+
+    def test_no_recommendation_without_a_terminal_or_with_json_or_when_installed(self):
+        self.on_path = {"claude"}
+        self.assertEqual(self.help_hint(tty=False)[1], "")
+        self.assertEqual(self.help_hint(ctx=context.CLIContext(json_mode=True))[1], "")
+        self.run_skill("install", "--agent", "claude")
+        self.assertEqual(self.help_hint()[1], "")
 
     def test_read_only_blocks_every_action(self):
         ctx = context.CLIContext(read_only=True)
