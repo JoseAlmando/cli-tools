@@ -5,8 +5,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "src" / "cli_tools" / "skill"
-REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md", "github": "references/github.md"}
-COMMANDS = {"login", "me", "issue", "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
+REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md", "github": "references/github.md",
+              "taiga": "references/taiga.md", "gitea": "references/gitea.md"}
+COMMANDS = {"login", "me", "issue", "mine", "wiql", "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
 WRITES = ("POST", "PUT", "PATCH", "DELETE")
 FLAGS = {"--json", "--read-only"}
 
@@ -47,10 +48,15 @@ class SkillTests(unittest.TestCase):
         for reference in REFERENCES.values():
             self.assertIn(reference, text)
 
-    def test_references_are_small(self):
-        for reference in REFERENCES.values():
+    def test_the_skill_and_its_references_cost_few_tokens(self):
+        # An agent reads SKILL.md on every clt task, and at most one reference; every session lists the description
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        description = re.search(r"^description: (.*)$", text, re.M).group(1)
+        self.assertLess(len(description), 300)
+        self.assertLess(len(text), 4000)
+        for reference in [*REFERENCES.values(), "references/release.md"]:
             with self.subTest(reference=reference):
-                self.assertLess(len((SKILL / reference).read_text(encoding="utf-8")), 8000)
+                self.assertLess(len((SKILL / reference).read_text(encoding="utf-8")), 4000)
 
     def test_every_recipe_uses_json_and_a_known_command(self):
         for tool, reference in REFERENCES.items():

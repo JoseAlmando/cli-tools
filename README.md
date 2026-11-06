@@ -58,24 +58,30 @@ PYTHONPATH=src python3 -m cli_tools taiga me   # python on Windows
 clt taiga login --url https://taiga.example.com # the first time; the server is saved
 clt taiga me                                    # same as: clt t me
 clt taiga GET "userstories?project=<id>"
+clt taiga mine                                  # your open stories, tasks and issues, one line each
 
 clt gitea login --url https://gitea.example.com # opens the browser
 clt gitea login --source <source>               # go straight to a Gitea external login source
 clt gitea GET "repos/<owner>/<repo>/pulls?state=open"
 clt gitea POST repos/<owner>/<repo>/pulls -d @pr.json
+clt gitea mine                                  # issues and pull requests assigned to you
 
 export TAIGA_TOKEN="$(clt taiga token)"         # for other scripts
 
 clt github login                                # asks: authorize in the browser, create a token, or paste one
 clt github GET "repos/<owner>/<repo>/releases" --fields tag_name,html_url
 clt github protect <owner>/<repo> --dry-run      # rulesets: only the repo admin updates main and v* tags
+clt github mine                                 # issues and pull requests assigned to you
 
 clt jira login --url https://<site>.atlassian.net --create-token
 clt jira issue PROJ-123                          # summary, description and comments as Markdown
 clt jira GET "search/jql?jql=assignee=currentUser()&fields=key,summary,status" --all
+clt jira mine                                   # your open tickets
 
 clt azdo login --org <organization> --create-token
-clt azdo GET _apis/projects --fields id,name
+clt azdo GET _apis/projects --fields id,name --table
+clt azdo mine                                   # your open work items in every project
+clt azdo wiql "SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.AssignedTo] = @Me"
 clt azdo GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --all --fields pullRequestId,title
 ```
 
@@ -133,11 +139,12 @@ Every tool can run unattended:
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one, and makes `me` print a JSON object (`id`, `username`, `full_name`, `email`, `url`, `credentials_file`, and `expires_at` in Gitea).
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
-- **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, and `--all` joins every page.
+- **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, `--all` joins every page, and `--table` prints a list as tab-separated lines under a header.
+- **One command for common reads.** `clt <tool> mine` lists your open items on any service as rows of kind, id, state, title and where (a JSON list with `--json`, a table with `--table`); `clt azdo wiql "<query>"` runs a WIQL query and reads the fields it selects. Both are reads and work under `--read-only`.
 
 `--json` and `--read-only` can go anywhere on the command line.
 
-clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules, opens with a table of common tasks and the exact command for each (so an agent does not search for them), and has recipes for Taiga and Gitea, plus `references/github.md`, `references/jira.md` and `references/azure-devops.md`, which an agent reads only when it works with that service. Install it where your agents read skills:
+clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules, opens with a table of common tasks and the exact command for each (so an agent does not search for them), and keeps the recipes in `references/` (`taiga.md`, `gitea.md`, `github.md`, `jira.md`, `azure-devops.md`, `release.md`), which an agent reads only when it works with that service. It also tells agents with persistent memory to keep the commands that worked, so the next session runs them without loading the skill. Install it where your agents read skills:
 
 ```bash
 clt skill install                    # for every agent CLI on the PATH (claude, codex, gemini)

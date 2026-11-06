@@ -124,10 +124,20 @@ def cmd_protect(gh, args):
         info(output.err.green("✓ ") + f"Ruleset {body['name']!r} {'updated' if method == 'PUT' else 'created'} in {args.repo}")
 
 
+def cmd_mine(gh, args):
+    items = api.fetch_list(gh.call, f"issues?filter=assigned&state=open&per_page={min(max(args.limit, 1), 100)}",
+                           args.limit, next_page)
+    rows = [{"kind": "pr" if item.get("pull_request") else "issue", "id": item.get("number"),
+             "state": item.get("state"), "title": item.get("title"),
+             "where": (item.get("repository") or {}).get("full_name")} for item in items if isinstance(item, dict)]
+    output.print_rows(rows, args.table, args.ctx.json_mode)
+
+
 def build_parser(prog):
     epilog = f"""\
 examples:
   {prog} login                                   # asks: authorize in the browser, create a token, or paste one
+  {prog} mine                                    # open issues and pull requests assigned to you, one line each
   {prog} login --browser                         # enter a code at github.com/login/device
   {prog} login --create-token                    # opens the token page with clt's permissions filled in
   {prog} me
@@ -178,6 +188,7 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("repo", metavar="OWNER/REPO")
     p.add_argument("--dry-run", action="store_true", help="print the requests that would be sent and send nothing")
     p.set_defaults(func=cmd_protect)
+    api.add_mine_parser(sub, cmd_mine, "issues and pull requests assigned to you, in every repository")
     api.add_api_parser(sub, prog, "repos/<owner>/<repo>/pulls",
                         lambda gh, args: api.run_api(args, gh.call, args.ctx, next_page), api_prefix="/")
     return parser

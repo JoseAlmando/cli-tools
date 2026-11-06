@@ -48,8 +48,41 @@ def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/"):
     p.add_argument("--all", action="store_true", help=f"follow the pagination and join the pages (GET, up to {MAX_PAGES} pages)")
     p.add_argument("--max-items", type=int, metavar="N",
                    help="keep only the first N items of a list; with --all, stop fetching pages once there are N")
+    p.add_argument("--table", action="store_true",
+                   help="print a list of objects as tab-separated lines under a header (fewer tokens than JSON)")
     p.add_argument("--dry-run", action="store_true", help="print the request that would be sent and send nothing")
     p.set_defaults(func=func)
+
+
+MINE_COLUMNS = ("kind", "id", "state", "title", "where")
+
+
+def add_mine_parser(sub, func, what):
+    """The mine command: the user's open items in one call, as rows of kind, id, state, title, where."""
+    p = sub.add_parser("mine", help=f"your open {what}, one row each: {', '.join(MINE_COLUMNS)}",
+                       description=f"Lists your open {what} with one command. Without --json it prints a "
+                                   "tab-separated table; with --json, a JSON list, unless --table is given too.")
+    p.add_argument("--limit", type=int, default=50, metavar="N", help="at most N items (default 50)")
+    p.add_argument("--table", action="store_true", help="a tab-separated table even with --json")
+    p.set_defaults(func=func)
+    return p
+
+
+def fetch_list(call, path, limit, next_page=None, items_key=None):
+    """The items of a list, following the pages until there are `limit` of them (GET only)."""
+    items = []
+    pages = 0
+    while path and len(items) < limit and pages < MAX_PAGES:
+        _, raw, headers = call("GET", path, None)
+        pages += 1
+        data = parse_json_or_text(raw)
+        key = items_key(data) if items_key and isinstance(data, dict) else None
+        page = data.get(key) if key else data
+        if not isinstance(page, list):
+            raise ToolError(f"Expected a list from {path.partition('?')[0]}")
+        items += page
+        path = (next_page or next_page_path)(headers, raw, path) if page else None
+    return items[:limit]
 
 
 def pick_fields(value, fields):
@@ -144,7 +177,7 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         output.print_headers(status, headers)
     elif args.verbose:
         info(output.err.green(f"✓ {args.method} {args.path} -> HTTP {status}"))
-    if len(pages) == 1 and not (args.fields or args.max_items):
+    if len(pages) == 1 and not (args.fields or args.max_items or getattr(args, "table", False)):
         output.print_response(raw, args.raw)
         return 0
     data = [parse_json_or_text(page) for page in pages]
@@ -159,9 +192,15 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         data = data[0]
     key = items_key(data) if items_key and isinstance(data, dict) else None
     if key is None or not isinstance(data.get(key), list):
-        output.print_response(json.dumps(trim(data, args, more), ensure_ascii=False), args.raw)
+        data = trim(data, args, more)
+        rows = data
+    else:
+        data = {**data, key: trim(data[key], args, more)}
+        rows = data[key]
+    if getattr(args, "table", False) and isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
+        if rows:
+            print(output.table(rows))
         return 0
-    data = {**data, key: trim(data[key], args, more)}
     output.print_response(json.dumps(data, ensure_ascii=False), args.raw)
     return 0
 

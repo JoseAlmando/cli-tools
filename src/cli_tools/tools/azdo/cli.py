@@ -69,6 +69,25 @@ def cmd_me(azdo, args):
     print(output.out.dim(f"Token from {creds['env']}" if credentials_file is None else f"Credentials: {credentials_file}"))
 
 
+def query_items(azdo, query, project, top, flag):
+    """The query's work items, saying on stderr when it stopped at `top` (there may be more)."""
+    items = client.query_items(azdo, query, project, top)
+    if top > 0 and len(items) >= top:
+        info(output.err.yellow(f"Stopped at {top} work items; there may be more (raise {flag})."))
+    return items
+
+
+def cmd_wiql(azdo, args):
+    output.print_rows(query_items(azdo, args.query, args.project, args.top, "--top"), args.table, args.ctx.json_mode)
+
+
+def cmd_mine(azdo, args):
+    items = query_items(azdo, client.mine_query(args.type, args.project), args.project, args.limit, "--limit")
+    rows = [{"kind": item.get("System.WorkItemType"), "id": item["id"], "state": item.get("System.State"),
+             "title": item.get("System.Title"), "where": item.get("System.TeamProject")} for item in items]
+    output.print_rows(rows, args.table, args.ctx.json_mode)
+
+
 MCP_THEN = "sign in in the browser the first time the agent uses it (needs Node.js 20 or later)"
 MCP_EPILOG = ("Runs Microsoft's local server (npx @azure-devops/mcp <organization>). If your tenant offers the remote "
               "one, https://mcp.dev.azure.com/<organization>, it needs an Entra ID app registration for Claude Code "
@@ -86,7 +105,9 @@ def build_parser(prog):
 examples:
   {prog} login --org <organization> --create-token
   {prog} me
-  {prog} GET _apis/projects --fields id,name
+  {prog} mine                                    # your open work items, one line each
+  {prog} wiql "SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.AssignedTo] = @Me"
+  {prog} GET _apis/projects --fields id,name --table
   {prog} GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --all --fields pullRequestId,title
   {prog} PATCH _apis/wit/workitems/<id> -d '[{{"op": "add", "path": "/fields/System.State", "value": "Active"}}]' --dry-run
 
@@ -129,6 +150,19 @@ for scripts and AI agents (any position on the command line):
     p = mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Microsoft's Azure DevOps "
                            "MCP server to an agent", MCP_EPILOG)
     p.add_argument("--org", help="the organization (default: AZDO_ORG or the saved session)")
+    p = sub.add_parser("wiql", help="run a WIQL query and read the columns it selects, in one command",
+                       description="Runs the query, then reads the work items' fields named in its SELECT "
+                                   "(title and state when it selects only [System.Id]). A read: works with "
+                                   "--read-only.")
+    p.add_argument("query", metavar="WIQL", help="e.g. \"SELECT [System.Id], [System.Title] FROM WorkItems "
+                                                 "WHERE [System.AssignedTo] = @Me\"")
+    p.add_argument("--project", help="the project the query runs in (needed for @project)")
+    p.add_argument("--top", type=int, default=200, metavar="N", help="at most N work items (default 200)")
+    p.add_argument("--table", action="store_true", help="a tab-separated table even with --json")
+    p.set_defaults(func=cmd_wiql)
+    p = api.add_mine_parser(sub, cmd_mine, "work items (not Closed, Done or Removed) in every project")
+    p.add_argument("--project", help="only this project")
+    p.add_argument("--type", help="only this work item type, e.g. Task or Bug")
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
                        lambda a, args: api.run_api(args, a.call, args.ctx, client.pager(), client.items_key,
                                                    client.join), api_prefix="/")
