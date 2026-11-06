@@ -60,11 +60,34 @@ def cmd_me(t, args):
     print(output.out.dim(f"Credentials: {t.credentials_file}"))
 
 
+# A user story can have several people assigned (assigned_users); tasks and issues have one (assigned_to)
+MINE_KINDS = (("story", "userstories", "assigned_users"), ("task", "tasks", "assigned_to"),
+              ("issue", "issues", "assigned_to"))
+
+
+def cmd_mine(t, args):
+    _, raw, _ = t.call("GET", "users/me", None)
+    me = http.parse_json(raw, "Getting the user")
+    if not isinstance(me, dict) or me.get("id") is None:
+        raise ToolError("Unexpected response from users/me")
+    rows = []
+    for kind, collection, assigned in MINE_KINDS:
+        left = args.limit - len(rows)
+        if left <= 0:
+            break
+        items = api.fetch_list(t.call, f"{collection}?{assigned}={me['id']}&status__is_closed=false", left)
+        rows += [{"kind": kind, "id": item.get("ref"), "state": (item.get("status_extra_info") or {}).get("name"),
+                  "title": item.get("subject"), "where": (item.get("project_extra_info") or {}).get("slug")}
+                 for item in items if isinstance(item, dict)]
+    output.print_rows(rows, args.table, args.ctx.json_mode)
+
+
 def build_parser(prog=PROG):
     epilog = f"""\
 examples:
   {prog} login --url https://taiga.example.com      # the first time; after that, {prog} login is enough
   {prog} me
+  {prog} mine                                    # open user stories, tasks and issues assigned to you
   {prog} GET "userstories?project=<id>"
   {prog} GET "userstories?project=<id>&page=2" -i   # see the x-pagination-* headers
   {prog} PATCH userstories/123 -d '{{"version": 4, "subject": "New title"}}'
@@ -99,6 +122,7 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", aliases=context.command_aliases("token"), help="print the access token").set_defaults(func=cmd_token)
+    api.add_mine_parser(sub, cmd_mine, "user stories, tasks and issues assigned to you, in every project")
     api.add_api_parser(sub, prog, "userstories?project=<id>", lambda t, args: api.run_api(args, t.call, args.ctx))
     return parser
 

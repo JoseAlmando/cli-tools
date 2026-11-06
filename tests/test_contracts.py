@@ -172,11 +172,11 @@ class HelpAndVersionTests(TempConf):
                 self.assertTrue(out.startswith(usage), out[:80])
 
     def test_the_api_clients_list_their_commands(self):
-        for script, argv, commands in (("clt", ["taiga"], "login refresh logout me token api"),
-                                       ("clt", ["gitea"], "login refresh logout me token api"),
-                                       ("clt", ["github"], "login refresh logout me token protect api"),
-                                       ("clt", ["jira"], "login logout me token issue mcp api"),
-                                       ("clt", ["azdo"], "login logout me token mcp api")):
+        for script, argv, commands in (("clt", ["taiga"], "login refresh logout me token mine api"),
+                                       ("clt", ["gitea"], "login refresh logout me token mine api"),
+                                       ("clt", ["github"], "login refresh logout me token protect mine api"),
+                                       ("clt", ["jira"], "login logout me token issue mine mcp api"),
+                                       ("clt", ["azdo"], "login logout me token mcp wiql mine api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():

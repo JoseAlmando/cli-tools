@@ -4,7 +4,7 @@ Azure DevOps Services REST API. Paths are relative to `https://dev.azure.com/<or
 
 ## Session
 
-Logging in needs a person (`clt azdo login --org <org> --create-token`); if a command exits with code 3, ask the user to run it, or to set `AZDO_ORG` and `AZDO_TOKEN`. `AZDO_TOKEN` and the Azure CLI's `AZURE_DEVOPS_EXT_PAT` win over the saved token; `clt azdo me` (text) says which one is used. `me`'s `id` is the reviewer id used to vote.
+`AZDO_TOKEN` and the Azure CLI's `AZURE_DEVOPS_EXT_PAT` win over the saved token; `clt azdo me` (text) says which one is used. `me`'s `id` is the reviewer id used to vote.
 
 ```bash
 clt azdo --json --read-only me
@@ -31,18 +31,17 @@ clt azdo --json --read-only GET '<project>/_apis/wit/workitemtypes/Task/fields?$
 
 Before creating, check the type is not disabled and which fields it requires (`alwaysRequired`, often `Custom.*`); a failed create lists them in `body.customProperties.RuleValidationErrors`.
 
-Query with WIQL. It is a read sent as `POST`, so it cannot run under `--read-only`; it returns only ids, read them with the second recipe above. `wiql.json`:
-
-```json
-{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed') ORDER BY [System.ChangedDate] DESC"}
-```
+Your open work items, or any WIQL query, in one command: `wiql` reads the columns its `SELECT` names (people as their display name). Both are reads, fine under `--read-only`:
 
 ```bash
-clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --dry-run
-clt azdo --json POST '<project>/_apis/wit/wiql?$top=50' -d @wiql.json --fields workItems
+clt azdo --json --read-only mine --table
+clt azdo --json --read-only mine --project <project> --type Bug --table
+clt azdo --json --read-only wiql "SELECT [System.Id], [System.State], [System.Title] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me" --project <project> --table
 ```
 
-If it returns exactly `$top` ids there are more: raise `$top`.
+`mine` leaves out `Closed`, `Done` and `Removed`; for processes with other final states, use `wiql`. Link queries (`FROM WorkItemLinks`) need the raw `POST '<project>/_apis/wit/wiql'`.
+
+`wiql` reads at most `--top` work items (default 200) and `mine` at most `--limit` (default 50); when stderr says it stopped there, raise it.
 
 Create a task under a parent. The body is a JSON Patch list; `task.json`:
 

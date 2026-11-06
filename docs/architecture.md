@@ -17,7 +17,8 @@ src/cli_tools/
 │   ├── output.py        colors, info(), printing JSON responses and headers
 │   ├── http.py          the configured server, api_url, safe_path, HTTPS without redirects, json_request, parse_json
 │   ├── credentials.py   credential files: 0600 in a 0700 folder, written atomically
-│   ├── api.py           the api command: METHOD path [-d JSON], --all, --fields, --max-items, --dry-run
+│   ├── api.py           the api command: METHOD path [-d JSON], --all, --fields, --max-items, --table, --dry-run;
+│   │                    the mine command's parser, and fetch_list for paged lists
 │   ├── mcp.py           the mcp command: an agent's "mcp add" command for an HTTP or stdio server, printed or run
 │   ├── agents.py        where each agent CLI reads skills, and the hint to install clt's (used by clt --help)
 │   └── runner.py        run(main): global flags, then errors turned into messages and exit codes
@@ -27,9 +28,9 @@ src/cli_tools/
 │   ├── github/          client.py (session, renewal of expiring tokens), cli.py, and auth.py (device flow, token refresh
 │   │                    and the pre-filled token page; only as clt github)
 │   ├── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
-│   │                    to plain text), cli.py (login, me, issue, mcp, api)
+│   │                    to plain text), cli.py (login, me, issue, mine, mcp, api)
 │   └── azdo/            client.py (organization, PAT as Basic auth, api-version, JSON Patch, paging hooks), cli.py
-│                        (login, me, mcp, api)
+│                        (login, me, mcp, wiql, mine, api)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
     ├── skill.py         clt skill: install, uninstall and refresh the skill in the agents' folders
@@ -61,10 +62,10 @@ Dependencies go one way:
 |---|---|
 | `errors` | Raise `ToolError` (exit 1), `NotLoggedIn` (exit 3) or `ReadOnlyError` (exit 4); `HttpError` carries the status, body and headers of a failed request. `error_detail(body)` gets the message out of any error body. |
 | `context` | `CLIContext`; `require_terminal("what")` before a prompt or a browser login, so they fail at once without a person. |
-| `output` | `info()` for messages (stderr); `output.out` and `output.err` for colors. Use them as attributes of the module: `setup_streams()` replaces them when a run starts. |
+| `output` | `info()` for messages (stderr); `output.out` and `output.err` for colors; `table(rows)` and `print_rows(rows, as_table, json_mode)` for lists of flat objects (`mine`, `wiql`, `--table`). Use them as attributes of the module: `setup_streams()` replaces them when a run starts. |
 | `http` | `resolve_url(cli_url, env_url, credentials_file, prog, var)` picks the server (login's `--url`, then the environment, then the last session) and accepts only `https://server`. `api_url(base, path, prefix)` accepts only paths relative to the API, so the token never leaves that server. `json_request(method, url, body, token, cacert, headers)` sends it without following redirects. `parse_json(raw, what)` fails with a clear message. |
 | `credentials` | `write_private_json(path, data)` and `read_json_file(path)` for the saved session. |
-| `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page, items_key, join)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. A tool passes `next_page(headers, body, path)` when the next page is in the body, `items_key(data)` when lists come inside an object (`{"issues": [...]}`) so `--fields` and `--max-items` reach them, and `join(pages)` to merge pages into that object. `set_query(path, params)` sets or removes query parameters of a relative path. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. |
+| `api` | `add_api_parser(sub, prog, example_path, func, api_prefix)` adds the `api` command; `run_api(args, call, ctx, next_page, items_key, join)` sends it, follows the pagination (only to the same server), and applies `--fields`, `--max-items` and `--dry-run`. A tool passes `next_page(headers, body, path)` when the next page is in the body, `items_key(data)` when lists come inside an object (`{"issues": [...]}`) so `--fields` and `--max-items` reach them, and `join(pages)` to merge pages into that object. `set_query(path, params)` sets or removes query parameters of a relative path. `with_api_shortcut(argv)` makes `<tool> GET path` the same as `<tool> api GET path`. `add_mine_parser(sub, func, what)` adds a tool's `mine` command (`--limit`, `--table`; rows of `MINE_COLUMNS`), and `fetch_list(call, path, limit, next_page, items_key)` reads a paged list up to a limit. |
 | `runner` | `run(main)`, for the `clt` console script. |
 | `agents` | `skill_target(agent)`, where an agent CLI reads clt's skill; `recommend_skill(ctx)` prints how to install it for the agents on the PATH that have none (only for a person: not with `--json`, not without a terminal). |
 

@@ -178,3 +178,51 @@ def join(pages):
     if "count" in joined:
         joined["count"] = len(joined[key])
     return joined
+
+
+BATCH = 200  # the most ids GET _apis/wit/workitems takes at once
+DEFAULT_COLUMNS = ("System.Title", "System.State")
+
+
+def field_value(value):
+    """A field as one short value: a person by their name, everything else as it is."""
+    if isinstance(value, dict) and "displayName" in value:
+        return value["displayName"]
+    return value
+
+
+def query_items(azdo, query, project=None, top=200):
+    """Runs a WIQL query and reads the columns it selects: a list of {"id", <column>: value, ...} in query order."""
+    path = (f"{urllib.parse.quote(project, safe='')}/" if project else "") + f"_apis/wit/wiql?$top={top}"
+    _, raw, _ = azdo.call("POST", path, json.dumps({"query": query}))
+    answer = http.parse_json(raw, "Running the query")
+    if not isinstance(answer, dict) or not isinstance(answer.get("workItems"), list):
+        raise ToolError("The query returned links, not work items; run link queries with "
+                        f"{PROG} POST '<project>/_apis/wit/wiql' -d @query.json")
+    columns = [c.get("referenceName") for c in answer.get("columns") or [] if isinstance(c, dict)]
+    columns = [c for c in columns if c and c != "System.Id"] or list(DEFAULT_COLUMNS)
+    ids = [item["id"] for item in answer["workItems"] if isinstance(item, dict) and "id" in item]
+    found = {}
+    for start in range(0, len(ids), BATCH):
+        part = ",".join(str(i) for i in ids[start:start + BATCH])
+        _, raw, _ = azdo.call("GET", f"_apis/wit/workitems?ids={urllib.parse.quote(part)}"
+                                     f"&fields={urllib.parse.quote(','.join(columns))}&errorPolicy=omit", None)
+        data = http.parse_json(raw, "Reading the work items")
+        for item in (data.get("value") if isinstance(data, dict) else None) or []:
+            if isinstance(item, dict):
+                found[item.get("id")] = item.get("fields") or {}
+    return [{"id": i, **{c: field_value(found[i].get(c)) for c in columns}} for i in ids if i in found]
+
+
+def wiql_text(value):
+    return "'" + value.replace("'", "''") + "'"
+
+
+def mine_query(work_item_type=None, project=None):
+    conditions = ["[System.AssignedTo] = @Me", "[System.State] NOT IN ('Closed', 'Done', 'Removed')"]
+    if work_item_type:
+        conditions.append(f"[System.WorkItemType] = {wiql_text(work_item_type)}")
+    if project:
+        conditions.append("[System.TeamProject] = @project")
+    return ("SELECT [System.Id], [System.WorkItemType], [System.State], [System.Title], [System.TeamProject] "
+            "FROM WorkItems WHERE " + " AND ".join(conditions) + " ORDER BY [System.ChangedDate] DESC")

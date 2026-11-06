@@ -169,11 +169,29 @@ def cmd_mcp(jira, args):
     return mcp.run_mcp(args, args.ctx, mcp.http_command(args.agent, "atlassian", MCP_URL), MCP_THEN[args.agent])
 
 
+MINE_JQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+
+
+def cmd_mine(jira, args):
+    jql = MINE_JQL if not args.project else 'project = "' + args.project.replace('"', '\\"') + '" AND ' + MINE_JQL
+    path = (f"search/jql?jql={urllib.parse.quote(jql)}&fields=summary,status,issuetype,project"
+            f"&maxResults={min(max(args.limit, 1), 100)}")
+    items = api.fetch_list(jira.call, path, args.limit, client.next_page, client.items_key)
+    rows = []
+    for item in (item for item in items if isinstance(item, dict)):
+        fields = item.get("fields") or {}
+        rows.append({"kind": _name(fields.get("issuetype")), "id": item.get("key"),
+                     "state": _name(fields.get("status")), "title": fields.get("summary"),
+                     "where": _name(fields.get("project"), "key")})
+    output.print_rows(rows, args.table, args.ctx.json_mode)
+
+
 def build_parser(prog):
     epilog = f"""\
 examples:
   {prog} login --url https://<site>.atlassian.net --create-token
   {prog} me
+  {prog} mine                                    # your open tickets (not Done), one line each
   {prog} issue <KEY>                             # summary, description and comments as Markdown
   {prog} GET "search/jql?jql=assignee=currentUser() AND statusCategory!=Done&fields=key,summary,status" --all
   {prog} GET issue/<KEY>/transitions --fields transitions
@@ -222,6 +240,8 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("key", metavar="KEY", help="the issue key, e.g. PROJ-123")
     p.add_argument("--comments", type=int, default=10, metavar="N", help="keep the last N comments (default 10)")
     p.set_defaults(func=cmd_issue)
+    p = api.add_mine_parser(sub, cmd_mine, "tickets (status category not Done), most recently updated first")
+    p.add_argument("--project", help="only this project key")
     mcp.add_mcp_parser(sub, cmd_mcp, "print (or --install) the command that connects Atlassian's MCP server to an agent",
                        MCP_EPILOG)
     api.add_api_parser(sub, prog, "issue/<KEY>",

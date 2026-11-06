@@ -1,5 +1,11 @@
 # clt github: recipes
 
+Issues and pull requests assigned to you in every repository, in one command:
+
+```bash
+clt github --json --read-only mine --table
+```
+
 Paths are relative to `https://api.github.com/`. `<owner>/<repo>` is the repository, for example `octo/demo`. Writes
 need the user's go-ahead: show them with `--dry-run` first.
 

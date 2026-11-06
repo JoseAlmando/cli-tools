@@ -84,3 +84,26 @@ def print_headers(status, headers):
     for name, value in headers.items():
         info(err.dim(f"{name}: {value}"))
     info("")
+
+
+def cell(value):
+    """One table cell: nothing for null, compact JSON for objects and lists, tabs and line breaks as spaces."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list, bool)):
+        value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return " ".join(str(value).replace("\t", " ").splitlines())
+
+
+def table(rows):
+    """Objects as tab-separated lines under a header with every key, in the order they first appear."""
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    return "\n".join(["\t".join(columns)] + ["\t".join(cell(row.get(c)) for c in columns) for row in rows])
+
+
+def print_rows(rows, as_table, json_mode):
+    """A list of flat objects: a table, unless --json without --table asks for JSON."""
+    if json_mode and not as_table:
+        print(json.dumps(rows, ensure_ascii=False))
+    elif rows:
+        print(table(rows))

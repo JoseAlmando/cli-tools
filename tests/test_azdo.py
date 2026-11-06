@@ -321,6 +321,93 @@ class AzdoCliTests(TempConf):
                            env={"AZDO_ORG": "example", "AZURE_DEVOPS_EXT_PAT": "pat"})
         self.assertIn("AZURE_DEVOPS_EXT_PAT", out)
 
+    def test_wiql_queries_then_reads_the_selected_columns_in_one_command(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        query = "SELECT [System.Id], [System.State], [System.Title], [System.AssignedTo] FROM WorkItems"
+        wiql = {"columns": [{"referenceName": name} for name in
+                            ("System.Id", "System.State", "System.Title", "System.AssignedTo")],
+                "workItems": [{"id": 7}, {"id": 3}, {"id": 9}]}
+        fields = "System.State%2CSystem.Title%2CSystem.AssignedTo"
+        items = {"value": [{"id": 3, "fields": {"System.State": "Done", "System.Title": "B",
+                                                "System.AssignedTo": {"displayName": "Ana", "id": "x"}}},
+                           {"id": 7, "fields": {"System.State": "To Do", "System.Title": "A"}}, None]}
+        routes = {("POST", f"{ORG}/Demo/_apis/wit/wiql?$top=200&api-version=7.1"): (200, wiql),
+                  ("GET", f"{ORG}/_apis/wit/workitems?ids=7%2C3%2C9&fields={fields}&errorPolicy=omit"
+                          "&api-version=7.1"): (200, items)}
+        ctx = context.CLIContext(json_mode=True, read_only=True)
+        code, out, _, sent = run(["wiql", query, "--project", "Demo"], routes, env=env, ctx=ctx)
+        self.assertIsNone(code)
+        self.assertEqual(json.loads(sent[0].data), {"query": query})
+        self.assertEqual(json.loads(out), [
+            {"id": 7, "System.State": "To Do", "System.Title": "A", "System.AssignedTo": None},
+            {"id": 3, "System.State": "Done", "System.Title": "B", "System.AssignedTo": "Ana"}])
+        _, out, _, _ = run(["wiql", query, "--project", "Demo"], routes, env=env)
+        self.assertEqual(out.splitlines(), ["id\tSystem.State\tSystem.Title\tSystem.AssignedTo",
+                                            "7\tTo Do\tA\t", "3\tDone\tB\tAna"])
+
+    def test_wiql_with_only_ids_reads_title_and_state_in_batches_of_200(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        ids = list(range(1, 251))
+        wiql = {"columns": [{"referenceName": "System.Id"}], "workItems": [{"id": i} for i in ids]}
+        fields = "System.Title%2CSystem.State"
+
+        def batch(part):
+            return (("GET", f"{ORG}/_apis/wit/workitems?ids={'%2C'.join(map(str, part))}&fields={fields}"
+                            "&errorPolicy=omit&api-version=7.1"),
+                    (200, {"value": [{"id": i, "fields": {"System.Title": f"t{i}"}} for i in part]}))
+        routes = dict([batch(ids[:200]), batch(ids[200:]),
+                       (("POST", f"{ORG}/_apis/wit/wiql?$top=300&api-version=7.1"), (200, wiql))])
+        _, out, _, sent = run(["wiql", "SELECT [System.Id] FROM WorkItems", "--top", "300"], routes, env=env,
+                              ctx=context.CLIContext(json_mode=True))
+        self.assertEqual(len(sent), 3)
+        self.assertEqual([row["id"] for row in json.loads(out)], ids)
+
+    def test_wiql_with_no_results_sends_one_request(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        routes = {("POST", f"{ORG}/_apis/wit/wiql?$top=200&api-version=7.1"):
+                      (200, {"columns": [{"referenceName": "System.Id"}], "workItems": []})}
+        _, out, _, sent = run(["wiql", "SELECT [System.Id] FROM WorkItems"], routes, env=env,
+                              ctx=context.CLIContext(json_mode=True))
+        self.assertEqual((json.loads(out), len(sent)), ([], 1))
+
+    def test_wiql_says_when_it_stopped_at_top(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        wiql = {"columns": [{"referenceName": "System.Id"}], "workItems": [{"id": 1}, {"id": 2}]}
+        routes = {("POST", f"{ORG}/_apis/wit/wiql?$top=2&api-version=7.1"): (200, wiql),
+                  ("GET", f"{ORG}/_apis/wit/workitems?ids=1%2C2&fields=System.Title%2CSystem.State"
+                          "&errorPolicy=omit&api-version=7.1"):
+                      (200, {"value": [{"id": 1, "fields": {}}, {"id": 2, "fields": {}}]})}
+        _, _, err, _ = run(["wiql", "SELECT [System.Id] FROM WorkItems", "--top", "2"], routes, env=env,
+                           ctx=context.CLIContext(json_mode=True))
+        self.assertIn("--top", err)
+
+    def test_wiql_refuses_link_queries(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        routes = {("POST", f"{ORG}/_apis/wit/wiql?$top=200&api-version=7.1"):
+                      (200, {"queryType": "oneHop", "workItemRelations": []})}
+        with self.assertRaisesRegex(ToolError, "links"):
+            run(["wiql", "SELECT [System.Id] FROM WorkItemLinks"], routes, env=env)
+
+    def test_mine_lists_open_work_items_as_rows(self):
+        env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
+        names = ("System.Id", "System.WorkItemType", "System.State", "System.Title", "System.TeamProject")
+        wiql = {"columns": [{"referenceName": n} for n in names], "workItems": [{"id": 5}]}
+        fields = "%2C".join(names[1:])
+        routes = {("POST", f"{ORG}/Demo/_apis/wit/wiql?$top=50&api-version=7.1"): (200, wiql),
+                  ("GET", f"{ORG}/_apis/wit/workitems?ids=5&fields={fields}&errorPolicy=omit&api-version=7.1"):
+                      (200, {"value": [{"id": 5, "fields": {"System.WorkItemType": "Bug", "System.State": "Active",
+                                                            "System.Title": "Fix it", "System.TeamProject": "Demo"}}]})}
+        ctx = context.CLIContext(json_mode=True, read_only=True)
+        _, out, _, sent = run(["mine", "--project", "Demo", "--type", "O'Bug"], routes, env=env, ctx=ctx)
+        query = json.loads(sent[0].data)["query"]
+        self.assertIn("[System.AssignedTo] = @Me", query)
+        self.assertIn("[System.WorkItemType] = 'O''Bug'", query)
+        self.assertIn("[System.TeamProject] = @project", query)
+        self.assertEqual(json.loads(out), [{"kind": "Bug", "id": 5, "state": "Active", "title": "Fix it",
+                                            "where": "Demo"}])
+        _, out, _, _ = run(["mine", "--project", "Demo", "--table"], routes, env=env, ctx=ctx)
+        self.assertEqual(out.splitlines(), ["kind\tid\tstate\ttitle\twhere", "Bug\t5\tActive\tFix it\tDemo"])
+
     def test_read_only_blocks_session_commands(self):
         ctx = context.CLIContext(read_only=True)
         for argv in (["login", "--org", "example"], ["logout"], ["token"]):

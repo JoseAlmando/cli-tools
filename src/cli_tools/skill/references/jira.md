@@ -1,5 +1,11 @@
 # clt jira: recipes
 
+Your open tickets (status category not Done), in one command; `--project KEY` narrows them:
+
+```bash
+clt jira --json --read-only mine --table
+```
+
 Jira Cloud REST API v3. Paths are relative to `/rest/api/3/`. Read with `--json --read-only`; before any `POST` or `PUT`, show the request with `--dry-run` and send it only with the user's go-ahead.
 
 ## Session
