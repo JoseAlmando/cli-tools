@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0 - 2026-11-06
+
+### Features
+
+- feat(azdo): wiql and mine commands, --table, and a cheaper skill
+- feat(skill): cut the skill to half its tokens
+
+### Other
+
+- Merge pull request #63 from JoseAlmando/feature/azdo-wiql-and-cheaper-skill
+
 ## 0.8.0 - 2026-11-05
 
 ### Features
