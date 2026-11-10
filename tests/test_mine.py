@@ -117,14 +117,42 @@ class GitHubMineTests(unittest.TestCase):
                           dict(zip(ROW, ("pr", 5, "open", "PR", "o/s")))])
 
 
+def gitea_item(number, title, repo, pull=True):
+    item = {"number": number, "title": title, "state": "open", "repository": {"full_name": repo}}
+    return {**item, "pull_request": {"merged": False}} if pull else item
+
+
+GITEA_SEARCH = "repos/issues/search?state=open&"
+
+
 class GiteaMineTests(unittest.TestCase):
-    def test_assigned_issues_and_pull_requests(self):
+    def test_assigned_items_then_pull_requests_to_review_then_my_own(self):
         from cli_tools.tools.gitea import cli
-        items = [{"number": 2, "title": "Fix", "state": "open", "pull_request": {"merged": False},
-                  "repository": {"full_name": "team/app"}}]
-        client = FakeClient({("GET", "repos/issues/search?state=open&assigned=true&limit=10"): (items,)})
+        client = FakeClient({
+            ("GET", GITEA_SEARCH + "assigned=true&limit=10"): ([gitea_item(2, "Fix", "team/app"),
+                                                               gitea_item(3, "Bug", "team/app", pull=False)],),
+            ("GET", GITEA_SEARCH + "type=pulls&review_requested=true&limit=8"): ([gitea_item(7, "Docs", "team/app")],),
+            ("GET", GITEA_SEARCH + "type=pulls&created=true&limit=7"): ([gitea_item(2, "Fix", "team/app"),
+                                                                       gitea_item(2, "Lib", "team/lib")],)})
         self.assertEqual(mine(cli.cmd_mine, client, json_mode=False, limit=10),
-                         "kind\tid\tstate\ttitle\twhere\npr\t2\topen\tFix\tteam/app\n")
+                         "kind\tid\tstate\ttitle\twhere\n"
+                         "pr\t2\topen\tFix\tteam/app\nissue\t3\topen\tBug\tteam/app\n"
+                         "pr\t7\topen\tDocs\tteam/app\npr\t2\topen\tLib\tteam/lib\n")
+
+    def test_stops_asking_once_the_limit_is_reached(self):
+        from cli_tools.tools.gitea import cli
+        client = FakeClient({("GET", GITEA_SEARCH + "assigned=true&limit=2"): ([gitea_item(2, "Fix", "team/app"),
+                                                                              gitea_item(3, "Bug", "team/app")],)})
+        self.assertEqual(len(json.loads(mine(cli.cmd_mine, client, limit=2))), 2)
+        self.assertEqual(client.paths, [GITEA_SEARCH + "assigned=true&limit=2"])
+
+    def test_nothing_open_prints_the_header(self):
+        from cli_tools.tools.gitea import cli
+        client = FakeClient({("GET", GITEA_SEARCH + "assigned=true&limit=5"): ([],),
+                             ("GET", GITEA_SEARCH + "type=pulls&review_requested=true&limit=5"): ([],),
+                             ("GET", GITEA_SEARCH + "type=pulls&created=true&limit=5"): ([],)})
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(mine(cli.cmd_mine, client, json_mode=False, limit=5), "kind\tid\tstate\ttitle\twhere\n")
 
 
 class TaigaMineTests(unittest.TestCase):

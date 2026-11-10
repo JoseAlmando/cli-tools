@@ -64,7 +64,7 @@ clt gitea login --url https://gitea.example.com # opens the browser
 clt gitea login --source <source>               # go straight to a Gitea external login source
 clt gitea GET "repos/<owner>/<repo>/pulls?state=open"
 clt gitea POST repos/<owner>/<repo>/pulls -d @pr.json
-clt gitea mine                                  # issues and pull requests assigned to you
+clt gitea mine                                  # assigned to you, waiting for your review, or opened by you
 
 export TAIGA_TOKEN="$(clt taiga token)"         # for other scripts
 
