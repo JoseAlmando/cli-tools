@@ -55,13 +55,27 @@ def cmd_me(g, args):
     print(output.out.dim(f"Credentials: {g.credentials_file}"))
 
 
+MINE_SEARCHES = ("assigned=true", "type=pulls&review_requested=true", "type=pulls&created=true")
+
+
 def cmd_mine(g, args):
-    items = api.fetch_list(g.call, f"repos/issues/search?state=open&assigned=true&limit={min(max(args.limit, 1), 50)}",
-                           args.limit)
-    rows = [{"kind": "pr" if item.get("pull_request") else "issue", "id": item.get("number"),
-             "state": item.get("state"), "title": item.get("title"),
-             "where": (item.get("repository") or {}).get("full_name")} for item in items if isinstance(item, dict)]
-    output.print_rows(rows, args.table, args.ctx.json_mode, api.MINE_COLUMNS)
+    limit = max(args.limit, 1)
+    rows, seen = [], set()
+    for search in MINE_SEARCHES:
+        wanted = limit - len(rows)
+        if wanted <= 0:
+            break
+        path = f"repos/issues/search?state=open&{search}&limit={min(wanted, 50)}"
+        for item in api.fetch_list(g.call, path, wanted):
+            if not isinstance(item, dict):
+                continue
+            where = (item.get("repository") or {}).get("full_name")
+            if (where, item.get("number")) in seen:
+                continue
+            seen.add((where, item.get("number")))
+            rows.append({"kind": "pr" if item.get("pull_request") else "issue", "id": item.get("number"),
+                         "state": item.get("state"), "title": item.get("title"), "where": where})
+    output.print_rows(rows[:limit], args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
 def build_parser(prog=PROG):
@@ -70,7 +84,7 @@ examples:
   {prog} login --url https://gitea.example.com       # the first time; opens the browser
   {prog} login --source <source>                      # go straight to a Gitea external login source (OIDC)
   {prog} me
-  {prog} mine                                    # open issues and pull requests assigned to you
+  {prog} mine                                    # assigned to you, waiting for your review, or opened by you
   {prog} GET "repos/<owner>/<repo>/pulls?state=open"
   {prog} POST repos/<owner>/<repo>/pulls -d @pr.json
   {prog} PATCH repos/<owner>/<repo>/pulls/<n> -d '{{"title": "New title"}}'
@@ -110,7 +124,8 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", aliases=context.command_aliases("token"),
                    help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
-    api.add_mine_parser(sub, cmd_mine, "issues and pull requests assigned to you, in every repository")
+    api.add_mine_parser(sub, cmd_mine, "issues and pull requests assigned to you, then the pull requests waiting for your "
+                                        "review and the ones you opened, in every repository")
     api.add_api_parser(sub, prog, "repos/<owner>/<repo>/pulls", lambda g, args: api.run_api(args, g.call, args.ctx))
     return parser
 
