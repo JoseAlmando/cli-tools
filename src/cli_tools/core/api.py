@@ -198,8 +198,7 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         data = {**data, key: trim(data[key], args, more)}
         rows = data[key]
     if getattr(args, "table", False) and isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
-        if rows:
-            print(output.table(rows))
+        output.print_table(rows, [f.strip() for f in args.fields.split(",") if f.strip()] if args.fields else None)
         return 0
     output.print_response(json.dumps(data, ensure_ascii=False), args.raw)
     return 0

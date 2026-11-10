@@ -130,7 +130,7 @@ def cmd_mine(gh, args):
     rows = [{"kind": "pr" if item.get("pull_request") else "issue", "id": item.get("number"),
              "state": item.get("state"), "title": item.get("title"),
              "where": (item.get("repository") or {}).get("full_name")} for item in items if isinstance(item, dict)]
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    output.print_rows(rows, args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
 def build_parser(prog):

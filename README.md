@@ -139,7 +139,7 @@ Every tool can run unattended:
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one, and makes `me` print a JSON object (`id`, `username`, `full_name`, `email`, `url`, `credentials_file`, and `expires_at` in Gitea).
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
-- **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, `--all` joins every page, and `--table` prints a list as tab-separated lines under a header.
+- **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, `--all` joins every page, and `--table` prints a list as tab-separated lines under a header (an empty list prints the header when the columns are known, and `No items.` on stderr).
 - **One command for common reads.** `clt <tool> mine` lists your open items on any service as rows of kind, id, state, title and where (a JSON list with `--json`, a table with `--table`); `clt azdo wiql "<query>"` runs a WIQL query and reads the fields it selects. Both are reads and work under `--read-only`.
 
 `--json` and `--read-only` can go anywhere on the command line.

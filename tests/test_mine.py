@@ -49,10 +49,20 @@ class TableTests(unittest.TestCase):
             with self.subTest(json_mode=json_mode, table=table), contextlib.redirect_stdout(out):
                 output.print_rows(rows, table, json_mode)
                 self.assertEqual(out.getvalue(), expected)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            output.print_rows([], True, True)
-        self.assertEqual(out.getvalue(), "")
+
+    def test_an_empty_table_prints_its_header_and_says_so(self):
+        for columns, expected in ((ROW, "kind\tid\tstate\ttitle\twhere\n"), (None, "")):
+            out, err = io.StringIO(), io.StringIO()
+            with self.subTest(columns=columns), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                output.print_rows([], True, True, columns)
+                self.assertEqual(out.getvalue(), expected)
+                self.assertEqual(err.getvalue(), "No items.\n")
+
+    def test_an_empty_json_list_stays_quiet(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            output.print_rows([], False, True, ROW)
+        self.assertEqual((out.getvalue(), err.getvalue()), ("[]\n", ""))
 
 
 class ApiTableTests(unittest.TestCase):
@@ -70,6 +80,12 @@ class ApiTableTests(unittest.TestCase):
                   ("GET", "b"): ({"count": 1, "value": [{"id": 3, "n": "z"}]},)}
         self.assertEqual(self.run_api(["GET", "a", "--table", "--fields", "n"], routes), "n\nx\ny\n")
         self.assertEqual(self.run_api(["GET", "b", "--table"], routes, lambda d: "value"), "id\tn\n3\tz\n")
+
+    def test_an_empty_table_prints_the_header_of_its_fields(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = self.run_api(["GET", "a", "--table", "--fields", "id,n"], {("GET", "a"): ([],)})
+        self.assertEqual((out, err.getvalue()), ("id\tn\n", "No items.\n"))
 
     def test_table_leaves_a_single_object_as_json(self):
         out = self.run_api(["GET", "a", "--table"], {("GET", "a"): ({"id": 1},)})

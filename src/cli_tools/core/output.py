@@ -101,9 +101,19 @@ def table(rows):
     return "\n".join(["\t".join(columns)] + ["\t".join(cell(row.get(c)) for c in columns) for row in rows])
 
 
-def print_rows(rows, as_table, json_mode):
+def print_table(rows, columns=None):
+    """Rows as a table; with none, the header alone when the columns are known, and a note on stderr."""
+    if rows:
+        print(table(rows))
+        return
+    if columns:
+        print("\t".join(columns))
+    info("No items.")
+
+
+def print_rows(rows, as_table, json_mode, columns=None):
     """A list of flat objects: a table, unless --json without --table asks for JSON."""
     if json_mode and not as_table:
         print(json.dumps(rows, ensure_ascii=False))
-    elif rows:
-        print(table(rows))
+    else:
+        print_table(rows, columns)
