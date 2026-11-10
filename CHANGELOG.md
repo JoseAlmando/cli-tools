@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1 - 2026-11-10
+
+### Fixes
+
+- fix(output): an empty table prints its header and says "No items." on stderr
+- fix(gitea): mine also lists the pull requests waiting for your review and the ones you opened
+
+### Other
+
+- docs(skill): Gitea recipes for pull request files, reviews, replies and merges
+
 ## 0.9.0 - 2026-11-06
 
 ### Features
