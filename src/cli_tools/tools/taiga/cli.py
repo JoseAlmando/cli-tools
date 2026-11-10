@@ -79,7 +79,7 @@ def cmd_mine(t, args):
         rows += [{"kind": kind, "id": item.get("ref"), "state": (item.get("status_extra_info") or {}).get("name"),
                   "title": item.get("subject"), "where": (item.get("project_extra_info") or {}).get("slug")}
                  for item in items if isinstance(item, dict)]
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    output.print_rows(rows, args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
 def build_parser(prog=PROG):

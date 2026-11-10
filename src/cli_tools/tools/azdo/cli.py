@@ -85,7 +85,7 @@ def cmd_mine(azdo, args):
     items = query_items(azdo, client.mine_query(args.type, args.project), args.project, args.limit, "--limit")
     rows = [{"kind": item.get("System.WorkItemType"), "id": item["id"], "state": item.get("System.State"),
              "title": item.get("System.Title"), "where": item.get("System.TeamProject")} for item in items]
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    output.print_rows(rows, args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
 MCP_THEN = "sign in in the browser the first time the agent uses it (needs Node.js 20 or later)"

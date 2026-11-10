@@ -183,7 +183,7 @@ def cmd_mine(jira, args):
         rows.append({"kind": _name(fields.get("issuetype")), "id": item.get("key"),
                      "state": _name(fields.get("status")), "title": fields.get("summary"),
                      "where": _name(fields.get("project"), "key")})
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    output.print_rows(rows, args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
 def build_parser(prog):
