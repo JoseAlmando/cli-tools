@@ -103,7 +103,9 @@ class ShellTests(unittest.TestCase):
     @unittest.skipUnless(BASH, "bash is not installed")
     def test_bash(self):
         python = Path(sys.executable).as_posix()
-        shim = write(self.bin / "clt", f'#!/usr/bin/env bash\nexec "{python}" -m cli_tools "$@"\n')
+        # The stand-in also shows what it received, for a failure on another shell version
+        shim = write(self.bin / "clt", '#!/usr/bin/env bash\nprintf "received: %s" "$CLT_COMPLETE" | od -c >&2\n'
+                                       f'exec "{python}" -m cli_tools "$@"\n')
         if os.name != "nt":
             shim.chmod(0o755)
         script = write(self.bin / "complete-test.bash", self.script("bash")
