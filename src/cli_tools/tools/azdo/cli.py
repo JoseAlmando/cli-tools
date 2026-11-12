@@ -166,7 +166,7 @@ for scripts and AI agents (any position on the command line):
     p.add_argument("--type", help="only this work item type, e.g. Task or Bug")
     api.add_api_parser(sub, prog, "<project>/_apis/wit/workitems/<id>",
                        lambda a, args: api.run_api(args, a.call, args.ctx, client.pager(), client.items_key,
-                                                   client.join), api_prefix="/")
+                                                   client.join), api_prefix="/", renews=False)
     return parser
 
 

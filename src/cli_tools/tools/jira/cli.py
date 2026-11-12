@@ -250,7 +250,7 @@ for scripts and AI agents (any position on the command line):
                        MCP_EPILOG)
     api.add_api_parser(sub, prog, "issue/<KEY>",
                        lambda j, args: api.run_api(args, j.call, args.ctx, client.next_page, client.items_key,
-                                                   client.join), api_prefix=API_PREFIX)
+                                                   client.join), api_prefix=API_PREFIX, renews=False)
     return parser
 
 

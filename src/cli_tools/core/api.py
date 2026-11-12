@@ -32,10 +32,12 @@ def read_body(data):
     return body
 
 
-def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/", description=None):
+def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/", description=None, renews=True):
+    """renews: whether the tool renews an expired token and retries; Jira and Azure DevOps tokens do not renew."""
     p = sub.add_parser("api", help=f"call the API: {prog} [api] METHOD path [-d JSON]",
-                       description=description or (f"Calls {api_prefix}<path> on the configured server. "
-                                                   "If the token has expired, it renews it and retries once."))
+                       description=description or (f"Calls {api_prefix}<path> on the configured server."
+                                                   + (" If the token has expired, it renews it and retries once."
+                                                      if renews else "")))
     p.add_argument("method", metavar="METHOD", type=str.upper, choices=METHODS, help=", ".join(METHODS))
     p.add_argument("path", metavar="path", help=f"relative to {api_prefix}, e.g. {example_path!r}")
     p.add_argument("-d", "--data", metavar="JSON", help="JSON body, @file, or @- for stdin")
