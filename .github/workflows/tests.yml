@@ -66,6 +66,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # zsh and fish for the completion tests (bash and PowerShell come with the runners)
+      - name: Shells for the completion tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish > /dev/null
+
       - name: Unit tests
         run: python -m unittest discover -s tests -t . -v
         env:
@@ -119,7 +124,15 @@ jobs:
           bin="$(uv tool dir --bin)"
           log="$(python -c "import tempfile; print(tempfile.gettempdir())")/clt-update.log"
           if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -u "$bin")"; log="$(cygpath -u "$log")"; fi
-          "$bin/clt" --json update --check
+          # Shared runners use up GitHub's API calls without a token now and then: a warning, not a failure
+          if ! check="$("$bin/clt" --json update --check 2>&1)"; then
+            echo "$check"
+            if grep -q "rate limit" <<< "$check"; then
+              echo "::warning::GitHub's API rate limit for this runner is used up; clt update was not tried"; exit 0
+            fi
+            exit 1
+          fi
+          echo "$check"
           "$bin/clt" update "$TARGET"
           if [ "$RUNNER_OS" = Windows ]; then
             # Wait for uv's last line in the log; running clt meanwhile would hold the folder uv replaces
