@@ -21,14 +21,15 @@ _PATCHED = (("POST", re.compile(r"(^|/)_apis/wit/workitems/\$[^/]+$", re.I)),
             ("PATCH", re.compile(r"(^|/)_apis/wit/workitems/\d+$", re.I)))
 
 
-def org_url(value):
+def org_url(value, source=None):
+    """https://dev.azure.com/<organization>, in lowercase: Azure DevOps does not tell names apart by case."""
     name = value.strip() if isinstance(value, str) else ""
     if name.lower().startswith(HOST):
         name = name[len(HOST):].rstrip("/")
     if not _ORG.fullmatch(name):
-        raise ToolError(f"{value!r} is not an Azure DevOps organization; give its name, as in "
-                        f"{HOST}<organization>")
-    return HOST + name
+        raise ToolError(f"{source + ': ' if source else ''}{value!r} is not an Azure DevOps organization; give its "
+                        f"name, as in {HOST}<organization>")
+    return HOST + name.lower()
 
 
 def basic_header(token):
@@ -61,11 +62,17 @@ class AzureDevOps:
         env = os.environ.get(ORG_VAR, "")
         self.url = None
         if require_url:
-            saved = credentials.read_json_file(self.credentials_file)
-            if not (org or env or (isinstance(saved, dict) and saved.get("url"))):
-                raise ToolError(f"No organization configured; use {PROG} login --org <organization> or set {ORG_VAR}")
-            self.url = org_url(http.resolve_url(org_url(org) if org else None, org_url(env) if env else "",
-                                                self.credentials_file, PROG, ORG_VAR))
+            # Only the source that wins is read, and an error names it: --org, then AZDO_ORG, then the saved session
+            if org:
+                self.url = org_url(org, "--org")
+            elif env:
+                self.url = org_url(env, ORG_VAR)
+            else:
+                saved = credentials.read_json_file(self.credentials_file)
+                if not (isinstance(saved, dict) and saved.get("url")):
+                    raise ToolError(f"No organization configured; use {PROG} login --org <organization> "
+                                    f"or set {ORG_VAR}")
+                self.url = org_url(saved["url"], str(self.credentials_file))
 
     def request(self, method, path, body=None, token=None):
         version = os.environ.get("AZDO_API_VERSION") or API_VERSION
@@ -109,7 +116,7 @@ class AzureDevOps:
             raise NotLoggedIn("Not logged in; run " + output.err.bold(f"{PROG} login") + " or set AZDO_TOKEN")
         if not isinstance(creds, dict) or not creds.get("token"):
             raise ToolError(f"{self.credentials_file} is incomplete; run {PROG} login")
-        if creds.get("url") != self.url:
+        if str(creds.get("url") or "").lower() != self.url:  # sessions saved before 0.14.2 may keep the case typed
             raise ToolError(f"The saved session is for {creds.get('url')}, not {self.url}; run {PROG} login")
         return creds
 

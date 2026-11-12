@@ -130,6 +130,28 @@ class AzdoRequestTests(TempConf):
         self.assertIn("other", str(caught.exception))
         self.assertIn("example", str(caught.exception))
 
+    def test_the_organization_is_compared_without_case(self):
+        c = client()
+        self.assertEqual(c.org_url("Example"), ORG)
+        credentials.write_private_json(c.AzureDevOps().credentials_file, {"url": "https://dev.azure.com/Example",
+                                                                           "token": "x"})
+        with mock.patch.dict(os.environ, AZDO_ORG="EXAMPLE"):
+            self.assertEqual(c.AzureDevOps().load_credentials()["token"], "x")
+
+    def test_a_bad_organization_names_where_it_came_from_and_org_wins_over_it(self):
+        c = client()
+        with mock.patch.dict(os.environ, AZDO_ORG="not an org"):
+            self.assertEqual(c.AzureDevOps("example").url, ORG)  # --org wins, so AZDO_ORG is not read
+            with self.assertRaisesRegex(ToolError, "^AZDO_ORG: 'not an org'"):
+                c.AzureDevOps()
+        with self.assertRaisesRegex(ToolError, "^--org: 'a b'"):
+            c.AzureDevOps("a b")
+        os.environ.pop("AZDO_ORG")
+        credentials.write_private_json(c.AzureDevOps(require_url=False).credentials_file,
+                                       {"url": "https://dev.azure.com/bad org", "token": "x"})
+        with self.assertRaisesRegex(ToolError, "credentials.json: 'https://dev.azure.com/bad org'"):
+            c.AzureDevOps()
+
     def test_saved_url_on_another_host_is_refused(self):
         os.environ.pop("AZDO_ORG")
         c = client()
@@ -255,6 +277,23 @@ class AzdoCliTests(TempConf):
         self.assertEqual(json.loads(out), {"count": 3, "value": [{"pullRequestId": 1}, {"pullRequestId": 2},
                                                                  {"pullRequestId": 3}]})
         self.assertEqual(len(sent), 2)
+
+    def test_a_full_last_page_then_an_empty_one_ends_the_list(self):
+        base = f"{ORG}/Demo/_apis/git/repositories/web/pullrequests"
+        first = {"count": 2, "value": [{"pullRequestId": 1}, {"pullRequestId": 2}]}
+        second = {"count": 2, "value": [{"pullRequestId": 3}, {"pullRequestId": 4}]}  # full, so one more is asked
+        routes = {("GET", base + "?$top=2&api-version=7.1"): (200, first),
+                  ("GET", base + "?%24top=2&%24skip=2&api-version=7.1"): (200, second),
+                  ("GET", base + "?%24top=2&%24skip=4&api-version=7.1"): (200, {"count": 0, "value": []})}
+        _, out, _, sent = run(["GET", "Demo/_apis/git/repositories/web/pullrequests?$top=2", "--all"], routes,
+                              env={"AZDO_ORG": "example", "AZDO_TOKEN": "pat"})
+        self.assertEqual((len(json.loads(out)["value"]), len(sent)), (4, 3))
+
+    def test_a_path_with_accents_is_encoded_once(self):
+        url = f"{ORG}/Caf%C3%A9/_apis/wit/workitems/1?api-version=7.1"
+        _, out, _, sent = run(["GET", "Café/_apis/wit/workitems/1"], {("GET", url): (200, {"id": 1})},
+                              env={"AZDO_ORG": "example", "AZDO_TOKEN": "pat"})
+        self.assertEqual((json.loads(out), [r.full_url for r in sent]), ({"id": 1}, [url]))
 
     def test_api_patch_work_item_sends_json_patch(self):
         url = f"{ORG}/_apis/wit/workitems/42?api-version=7.1"
