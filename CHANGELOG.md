@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1 - 2026-11-12
+
+### Fixes
+
+- fix(release): check what can stop a release before the tests, and agree on breaking changes
+- fix(skill): retry the rename when Windows holds the new folder for a moment
+
 ## 0.10.0 - 2026-11-12
 
 ### Features
