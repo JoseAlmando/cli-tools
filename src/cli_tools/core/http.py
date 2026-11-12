@@ -37,17 +37,23 @@ PATH_SAFE = "/%:@!$&'()*+,;=-._~"
 QUERY_SAFE = PATH_SAFE + "?"
 
 
-def safe_path(path):
-    route, mark, query = path.partition("?")
-    if any(urllib.parse.unquote(part) in (".", "..") for part in route.split("/")):
+def check_segments(path):
+    """A . or .. segment (encoded too) would leave the API's prefix on the server; the query part may hold them."""
+    if any(urllib.parse.unquote(part) in (".", "..") for part in path.partition("?")[0].split("/")):
         raise ToolError(f"Paths cannot have . or .. segments (got {path!r})")
+
+
+def safe_path(path):
+    check_segments(path)
+    route, mark, query = path.partition("?")
     return urllib.parse.quote(route, safe=PATH_SAFE) + mark + urllib.parse.quote(query, safe=QUERY_SAFE)
 
 
 def api_url(base, path, prefix="/api/v1/"):
-    """Only paths relative to the API: the token never leaves the configured server."""
+    """Only paths relative to the API: the token never leaves the configured server, nor the API's prefix."""
     if "://" in path or path.startswith("//") or "\\" in path:
         raise ToolError(f"Only paths relative to {base}{prefix} are accepted (got {path!r})")
+    check_segments(path)
     return f"{base}{prefix}{path.lstrip('/')}"
 
 

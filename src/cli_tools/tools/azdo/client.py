@@ -37,7 +37,7 @@ def basic_header(token):
 
 def with_api_version(path, version):
     query = path.partition("?")[2]
-    if any(name.lower() == "api-version" for name, _ in urllib.parse.parse_qsl(query, keep_blank_values=True)):
+    if any(name.lower() == "api-version" for name, _ in api.query_pairs(query)):
         return path
     return path + ("&" if "?" in path else "?") + "api-version=" + urllib.parse.quote(version, safe="")
 
@@ -69,6 +69,7 @@ class AzureDevOps:
 
     def request(self, method, path, body=None, token=None):
         version = os.environ.get("AZDO_API_VERSION") or API_VERSION
+        http.check_segments(path)  # before api-version is added, so the error shows the path as given
         url = http.api_url(self.url, http.safe_path(with_api_version(path, version)), "/")
         headers = {"Authorization": basic_header(token), "X-TFS-FedAuthRedirect": "Suppress",
                    "Content-Type": content_type(method, path)}
@@ -130,7 +131,7 @@ def items_key(data):
 def next_page(headers, body=None, path=None):
     if path is None:
         return None
-    params = dict(urllib.parse.parse_qsl(path.partition("?")[2], keep_blank_values=True))
+    params = dict(api.query_pairs(path.partition("?")[2]))
     token = {name.lower(): value for name, value in (headers or {}).items()}.get("x-ms-continuationtoken")
     if token:
         return api.set_query(path, {"continuationToken": token}) if token != params.get("continuationToken") else None

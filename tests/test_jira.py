@@ -265,7 +265,8 @@ class JiraPagingTests(TempConf):
         code, out, _, sent = run(["GET", recipe, "--fields", "key", "--all"],
                                  {("GET", url): page({"issues": [{"key": "A-1"}], "isLast": True})},
                                  env={"JIRA_URL": SITE})
-        self.assertEqual(json.loads(out), {"issues": [{"key": "A-1"}], "isLast": True})
+        # One page with --all has the shape of several: no paging keys (isLast, nextPageToken)
+        self.assertEqual(json.loads(out), {"issues": [{"key": "A-1"}]})
 
     def test_max_items_stops_paging_once_it_has_enough(self):
         base = SITE_API + "search/jql?jql=x"

@@ -107,11 +107,21 @@ def pick_fields(value, fields):
     return picked
 
 
+def query_pairs(query):
+    """The (name, value) pairs of a query, split on & only: parse_qsl in Python 3.9.0 and 3.9.1 splits on ; too."""
+    pairs = []
+    for part in query.split("&"):
+        if part:
+            name, _, value = part.partition("=")
+            pairs.append((urllib.parse.unquote_plus(name), urllib.parse.unquote_plus(value)))
+    return pairs
+
+
 def set_query(path, params):
     base, _, query = path.partition("?")
     done = set()
     result = []
-    for name, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
+    for name, value in query_pairs(query):
         if name in params:
             if name in done:
                 continue
@@ -161,15 +171,21 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         sent(args.path, status)
         pages = [raw]
         path = args.path
+        seen = {path}
         count = count_items(raw, items_key)
         more = False
         while args.all and args.method == "GET" and len(pages) < MAX_PAGES and (path := next_page(headers, raw, path)):
+            if path in seen:  # page tokens or links that go round: everything after this was read already
+                break
+            seen.add(path)
             if args.max_items is not None and count >= args.max_items:
                 more = True
                 break
             status, raw, headers = call("GET", path, None)
             sent(path, status)
             pages.append(raw)
+            if page_items(raw, items_key) == []:  # an empty page ends the list, whatever token it carries
+                break
             count += count_items(raw, items_key)
     except HttpError as e:
         if ctx.json_mode:
@@ -188,11 +204,17 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         return EXIT_ERROR
     if args.headers:
         output.print_headers(status, headers)
-    if len(pages) == 1 and not (args.fields or args.max_items or getattr(args, "table", False)):
+    for number, page in enumerate(pages[1:], 2):
+        if not is_json(page):
+            raise ToolError(f"page {number} of {args.path} is not JSON: {error_detail(page)}")
+    first = parse_json_or_text(pages[0])
+    # With --all, one page of a list in an object gets join() too, so it has the same shape as several
+    joined = args.all and join and items_key and isinstance(first, dict) and items_key(first) is not None
+    if len(pages) == 1 and not (joined or args.fields or args.max_items or getattr(args, "table", False)):
         output.print_response(raw, args.raw)
         return 0
-    data = [parse_json_or_text(page) for page in pages]
-    if len(pages) > 1:
+    data = [first] + [parse_json_or_text(page) for page in pages[1:]]
+    if len(pages) > 1 or joined:
         if join:
             data = join(data)
         else:
@@ -215,11 +237,24 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
     return 0
 
 
-def count_items(raw, items_key=None):
+def page_items(raw, items_key=None):
+    """The list a page holds (itself, or the one items_key names inside it), or None."""
     data = parse_json_or_text(raw)
     if isinstance(data, dict) and items_key:
         data = data.get(items_key(data) or "")
-    return len(data) if isinstance(data, list) else 0
+    return data if isinstance(data, list) else None
+
+
+def count_items(raw, items_key=None):
+    return len(page_items(raw, items_key) or [])
+
+
+def is_json(raw):
+    try:
+        json.loads(raw)
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 def trim(data, args, more=False):
