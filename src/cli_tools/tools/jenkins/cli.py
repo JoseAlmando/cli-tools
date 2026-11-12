@@ -31,7 +31,8 @@ def cmd_me(jenkins, args):
     name = identity.get("name")
     authenticated = identity.get("authenticated") is True
     if args.ctx.json_mode:
-        print(json.dumps({"username": name, "authenticated": authenticated, "url": jenkins.url}, ensure_ascii=False))
+        print(json.dumps({"username": name, "authenticated": authenticated, "url": jenkins.url,
+                          "token_source": jenkins.token_source()}, ensure_ascii=False))
     else:
         print(f"{name or 'anonymous'} on {jenkins.url} ({'authenticated' if authenticated else 'anonymous access'})")
 
@@ -112,7 +113,7 @@ environment variables:
 Without credentials, requests use Jenkins' anonymous permissions. API tokens do not renew automatically.
 --json enables JSON errors and structured output; log always writes plain text.
 --read-only sends only GET requests and blocks login and logout. Both flags work anywhere.
-"""
+""" + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Jenkins Remote Access API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

@@ -61,7 +61,8 @@ def cmd_me(jira, args):
     if args.ctx.json_mode:
         print(json.dumps({"id": me.get("accountId"), "username": creds["email"], "full_name": me.get("displayName"),
                           "email": me.get("emailAddress") or creds["email"], "url": jira.url,
-                          "credentials_file": credentials_file}, ensure_ascii=False))
+                          "credentials_file": credentials_file,
+                          "token_source": "credentials_file" if credentials_file else "JIRA_TOKEN"}, ensure_ascii=False))
         return
     print(f"{output.out.bold(me.get('displayName') or creds['email'])} ({output.out.cyan(creds['email'])}) "
           f"on {jira.url}, {creds['mode']} token")
@@ -215,8 +216,9 @@ for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, logout and token are blocked too
-  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
-"""
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,
+                    130 interrupted
+""" + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Jira Cloud API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

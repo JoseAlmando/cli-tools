@@ -49,7 +49,8 @@ def cmd_me(g, args):
         from_env = bool(os.environ.get("GITEA_TOKEN"))
         print(json.dumps({"id": me.get("id"), "username": me.get("login"), "full_name": me.get("full_name"),
                           "email": me.get("email"), "url": g.url, "expires_at": expires_at,
-                          "credentials_file": None if from_env else str(g.credentials_file)}, ensure_ascii=False))
+                          "credentials_file": None if from_env else str(g.credentials_file),
+                          "token_source": "GITEA_TOKEN" if from_env else "credentials_file"}, ensure_ascii=False))
         return
     print(f"{output.out.bold(me.get('full_name') or me.get('login', ''))} ({output.out.cyan(me.get('login', '?'))}) on {g.url}")
     if isinstance(expires_at, int):
@@ -106,8 +107,9 @@ for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, refresh, logout and token are blocked too
-  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
-"""
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,
+                    130 interrupted
+""" + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Gitea API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

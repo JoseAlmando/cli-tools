@@ -91,6 +91,12 @@ class Jenkins:
             return authorization(self.saved["user"], self.saved["token"])
         return None
 
+    def token_source(self):
+        """Where auth_header's token comes from, in the same order: the environment, the saved session, or none."""
+        if os.environ.get("JENKINS_USER") or os.environ.get("JENKINS_TOKEN"):
+            return "JENKINS_TOKEN"
+        return "credentials_file" if self.saved else None
+
     def request(self, method, path, body, auth):
         url = http.api_url(self.url, safe_path(path), prefix="/")
         headers = {"Authorization": auth} if auth else None
