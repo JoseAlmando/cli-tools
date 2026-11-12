@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0 - 2026-11-12
+
+### Features
+
+- feat: clearer api output, token_source in me, and the commit in clt --version
+
 ## 0.12.0 - 2026-11-12
 
 ### Features
