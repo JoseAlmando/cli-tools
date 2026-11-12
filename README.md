@@ -130,7 +130,7 @@ clt release --publish  # finishes a release that was tagged but not pushed or pu
 clt release --publish --dry-run   # shows what is still missing on origin and on the host, and changes nothing
 ```
 
-It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for `BREAKING CHANGE` or `type!:`, and `fix` otherwise. When commits use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) prefixes, the changelog section (also the release's text on GitHub or Gitea) groups them under *Breaking changes*, *Features*, *Fixes* and *Other*; without any, it is a plain list.
+It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for a `type!:` header or a `BREAKING CHANGE:` footer, and `fix` otherwise; the changelog uses the same rule. When commits use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) prefixes, the changelog section (also the release's text on GitHub or Gitea) groups them under *Breaking changes*, *Features*, *Fixes* and *Other*; without any, it is a plain list. Merge commits are left out. A changelog keeps its own line endings.
 
 A release contacts `origin` twice: once to check the branch and the tags, and once to push the branch and the tag together (`git push --atomic`), showing git's own messages. With a passphrase-protected SSH key, load it once with `ssh-add` so git does not ask on every push.
 
@@ -140,7 +140,7 @@ A release contacts `origin` twice: once to check the branch and the tags, and on
 | `--yes` | Never asks: takes the suggestion and does not push. |
 | `--no-push` | Stops after the local commit and tag. |
 | `--skip-tests` | Does not run the tests (says so). |
-| `--version-file PATH` | The file that holds the version, when it is not found on its own. |
+| `--version-file PATH` | The file that holds the version, when it is not found on its own; it must be inside the repo. |
 
 Settings per repo go in an optional `.clt.json`:
 

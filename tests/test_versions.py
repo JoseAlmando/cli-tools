@@ -22,6 +22,13 @@ class BumpTests(unittest.TestCase):
         self.assertEqual(versions.suggest_bump(["x\n\nBREAKING CHANGE: y"]), "major")
         self.assertEqual(versions.suggest_bump([]), "fix")
 
+    def test_suggestion_and_changelog_agree_on_breaking_changes(self):
+        for message in ("feat(api)!: x", "chore!: x", "fix: x\n\nBREAKING CHANGE: y", "Fix x\n\nBREAKING-CHANGE: y",
+                        "docs: explain the BREAKING CHANGE policy", "wip!: x", "fix: x\n\nnot a BREAKING CHANGE: y"):
+            with self.subTest(message=message):
+                self.assertEqual(versions.suggest_bump([message]) == "major",
+                                 versions.change_kind(message) == "breaking")
+
 
 class FindVersionFileTests(unittest.TestCase):
     def setUp(self):

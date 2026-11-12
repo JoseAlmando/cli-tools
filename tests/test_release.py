@@ -106,6 +106,27 @@ class ReleaseTests(ReleaseRepo):
         with self.assertRaisesRegex(ToolError, "needs a person"):
             self.release("--no-push", "--skip-tests")
 
+    def test_without_a_terminal_it_fails_before_running_the_tests(self):
+        marker = Path(self.tmp.name) / "ran"
+        (self.root / ".clt.json").write_text(json.dumps({"release": {
+            "test_command": [sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"]}}))
+        self.git("add", "-A")
+        self.git("commit", "--quiet", "-m", "Configure releases")
+        self.git("push", "--quiet", "origin", "main")
+        with self.assertRaisesRegex(ToolError, "needs a person"):
+            self.release("--no-push")
+        self.assertFalse(marker.exists())
+
+    def test_a_version_file_outside_the_repo_is_refused(self):
+        outside = Path(self.tmp.name) / "VERSION"
+        outside.write_text("0.1.0\n")
+        for argv in (("--dry-run", "--bump", "fix"), ("--bump", "fix", "--yes", "--no-push", "--skip-tests")):
+            with self.subTest(argv=argv):
+                before = self.state()
+                with self.assertRaisesRegex(ToolError, "inside the repository"):
+                    self.release(*argv, "--version-file", str(outside))
+                self.assertEqual(self.state(), before)
+
     def test_yes_never_pushes(self):
         _, _, err = self.release("--yes", "--skip-tests")
         self.assertFalse(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
@@ -291,6 +312,24 @@ class ChangelogTests(unittest.TestCase):
                              "### Breaking changes\n\n- feat!: a\n\n### Fixes\n\n- fix: b\n")
             self.assertEqual(release.changelog_section(path, "1.0.0"), body)
 
+    def test_a_changelog_without_a_title_gets_the_section_on_top(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CHANGELOG.md"
+            path.write_bytes(b"## 0.2.0 - 2026-01-02\n\n- Second\n\n## 0.1.0 - 2026-01-01\n\n- First\n")
+            release.prepend_changelog(path, "0.3.0", "2026-01-03", ["Third"])
+            self.assertEqual(path.read_bytes(), b"## 0.3.0 - 2026-01-03\n\n- Third\n\n## 0.2.0 - 2026-01-02\n\n"
+                                                b"- Second\n\n## 0.1.0 - 2026-01-01\n\n- First\n")
+
+    def test_a_changelog_with_windows_line_endings_keeps_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CHANGELOG.md"
+            path.write_bytes(b"# Changelog\r\n\r\n## 0.1.0 - 2026-01-01\r\n\r\n- First\r\n")
+            release.prepend_changelog(path, "0.2.0", "2026-01-02", ["feat: x", "fix: y"])
+            self.assertEqual(path.read_bytes(), b"# Changelog\r\n\r\n## 0.2.0 - 2026-01-02\r\n\r\n### Features\r\n\r\n"
+                                                b"- feat: x\r\n\r\n### Fixes\r\n\r\n- fix: y\r\n\r\n"
+                                                b"## 0.1.0 - 2026-01-01\r\n\r\n- First\r\n")
+            self.assertEqual(release.changelog_section(path, "0.2.0"), "### Features\n\n- feat: x\n\n### Fixes\n\n- fix: y")
+
 
 class FakePublisher:
     def __init__(self, existing=None, fail_create=False):
@@ -383,6 +422,17 @@ class PublishTests(ReleaseRepo):
                 self.git("tag", "-d", "v0.2.0")
                 self.git("reset", "--quiet", "--hard", "origin/main")
 
+    def test_publish_pushes_only_the_tag_when_the_branch_already_went(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        self.git("push", "--quiet", "origin", "main")  # as if the tag push had failed after the branch push
+        calls = self.talks()
+        _, _, err = self.release("--publish")
+        self.assertEqual([c.split()[0] for c in calls], ["ls-remote", "push"])
+        self.assertEqual(calls[1].split()[1:], ["refs/tags/v0.2.0"])
+        self.assertIn("Pushing v0.2.0 to origin", err)
+        self.assertTrue(self.remote_has("v0.2.0"))
+        self.assertEqual(len(self.publisher.created), 1)
+
     def test_publish_resumes_after_a_failed_release_creation(self):
         self.publisher.fail_create = True
         with self.assertRaisesRegex(ToolError, "down"):
@@ -458,6 +508,11 @@ class PublisherTests(TempConf):
             with self.assertRaisesRegex(ToolError, "other.example.com"):
                 release.publisher_for("other.example.com")
 
+    def test_a_host_without_a_gitea_session_is_not_logged_in(self):
+        with self.assertRaises(errors.NotLoggedIn) as caught:
+            release.publisher_for("gitea.example.com")
+        self.assertIn("clt gitea login --url https://gitea.example.com", str(caught.exception))
+
     def test_release_url_and_create_release(self):
         calls = []
 
@@ -516,6 +571,11 @@ class TestCommandTests(GitRepo):
 
     def test_dotnet_default(self):
         self.assertEqual(release.test_command(self.root, {}, "dotnet"), (["dotnet", "test"], {}))
+
+    def test_test_env_must_be_an_object(self):
+        for value in (["PYTHONPATH=src"], "PYTHONPATH=src", 1):
+            with self.subTest(value=value), self.assertRaisesRegex(ToolError, "test_env must be an object"):
+                release.test_command(self.root, {"test_env": value}, "python")
 
     def test_a_broken_config_file_says_so(self):
         (self.root / ".clt.json").write_text("{not json")

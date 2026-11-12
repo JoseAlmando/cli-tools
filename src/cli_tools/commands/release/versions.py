@@ -22,13 +22,10 @@ def bump(version, kind):
     return f"{major}.{minor}.{patch + 1}"
 
 
-def suggest_bump(subjects):
-    """major for breaking changes, feat for new features, fix otherwise (Conventional Commits prefixes)."""
-    if any("BREAKING CHANGE" in s or re.match(r"\w+(\(.+\))?!:", s) for s in subjects):
-        return "major"
-    if any(re.match(r"feat(\(.+\))?:", s) for s in subjects):
-        return "feat"
-    return "fix"
+def suggest_bump(messages):
+    """major for breaking changes, feat for new features, fix otherwise; the changelog's rule (change_kind)."""
+    kinds = {change_kind(m) for m in messages}
+    return "major" if "breaking" in kinds else "feat" if "feat" in kinds else "fix"
 
 
 def _conventional_header(message):
@@ -130,6 +127,8 @@ def find_version_file(root, override=None):
     root = Path(root)
     if override:
         path = Path(override) if Path(override).is_absolute() else root / override
+        if root.resolve() not in path.resolve().parents:
+            raise ToolError(f"The version file {override} must be inside the repository, to be committed with the release")
         if not path.is_file():
             raise ToolError(f"The version file {override} does not exist")
         return VersionFile(path, _kind_of(path))

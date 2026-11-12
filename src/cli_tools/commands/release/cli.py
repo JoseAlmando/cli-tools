@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cli_tools.commands.release import gitrepo, versions
 from cli_tools.core import context, http, output
-from cli_tools.core.errors import HttpError, ToolError
+from cli_tools.core.errors import HttpError, NotLoggedIn, ToolError
 from cli_tools.core.output import info
 from cli_tools.tools.gitea.client import Gitea
 from cli_tools.tools.github.client import GitHub
@@ -56,7 +56,10 @@ def _uses_pytest(root):
 
 def test_command(root, config, kind):
     """(argv, extra environment) that runs the project's tests."""
-    env = {str(k): str(v) for k, v in (config.get("test_env") or {}).items()}
+    test_env = config.get("test_env") or {}
+    if not isinstance(test_env, dict):
+        raise ToolError(f'{CONFIG_FILE}: release.test_env must be an object, such as {{"PYTHONPATH": "src"}}')
+    env = {str(k): str(v) for k, v in test_env.items()}
     command = config.get("test_command")
     if command:
         if not isinstance(command, list) or not all(isinstance(a, str) for a in command):
@@ -107,13 +110,16 @@ def prepend_changelog(path, version, date, messages):
     path = Path(path)
     body = format_section(messages)
     block = f"## {version} - {date}\n\n{body}\n"
-    text = path.read_bytes().decode("utf-8") if path.is_file() else "# Changelog\n"
-    first = text.find("\n## ")
-    if first == -1:
+    raw = path.read_bytes().decode("utf-8") if path.is_file() else "# Changelog\n"
+    newline = "\r\n" if "\r\n" in raw else "\n"  # the file keeps its own line endings
+    text = raw.replace("\r\n", "\n")
+    found = text.find("\n## ")
+    first = 0 if text.startswith("## ") else None if found == -1 else found + 1  # where the newest section starts
+    if first is None:
         text = text.rstrip("\n") + "\n\n" + block
     else:
-        text = text[:first + 1] + block + "\n" + text[first + 1:]
-    path.write_bytes(text.encode("utf-8"))
+        text = text[:first] + block + "\n" + text[first:]
+    path.write_bytes(text.replace("\n", newline).encode("utf-8"))
     return body
 
 
@@ -166,9 +172,10 @@ def publisher_for(host):
         return Publisher(client)
     try:
         g = Gitea()
-    except ToolError:
-        g = None
-    if g and urllib.parse.urlsplit(g.url).hostname == host:
+    except ToolError:  # no Gitea server configured at all
+        raise NotLoggedIn(f"{host} is not github.com and there is no clt gitea session; if it is a Gitea server, "
+                          f"run clt gitea login --url https://{host}") from None
+    if urllib.parse.urlsplit(g.url).hostname == host:
         g.load_credentials()
         return Publisher(g)
     raise ToolError(f"{host} is neither github.com nor the server of the clt gitea session; cannot publish there")
@@ -304,6 +311,8 @@ def relative(plan):
 def make_release(args):
     if not args.dry_run:
         args.ctx.require_writes("release")
+    if not (args.bump or args.yes or args.dry_run):  # the question comes after the tests: fail before them
+        context.require_terminal("clt release (without --bump or --yes)")
     root = find_root()
     plan = plan_release(root, args)
     if not args.dry_run:
