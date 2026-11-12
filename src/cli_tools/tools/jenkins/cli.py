@@ -47,8 +47,8 @@ def list_objects(jenkins, path, key, tree):
 def cmd_jobs(jenkins, args):
     path = f"{job_path(args.folder)}/api/json" if args.folder else "api/json"
     jobs = list_objects(jenkins, path, "jobs", "jobs[name,url,color]")
-    rows = api.pick_fields(jobs, ("name", "url", "color"))
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    columns = ("name", "url", "color")
+    output.print_rows(api.pick_fields(jobs, columns), args.table, args.ctx.json_mode, columns)
 
 
 def cmd_queue(jenkins, args):
@@ -56,7 +56,7 @@ def cmd_queue(jenkins, args):
     rows = []
     for item in api.pick_fields(items, ("id", "task.name", "why", "task.url")):
         rows.append({"id": item["id"], "name": item["task.name"], "why": item["why"], "url": item["task.url"]})
-    output.print_rows(rows, args.table, args.ctx.json_mode)
+    output.print_rows(rows, args.table, args.ctx.json_mode, ("id", "name", "why", "url"))
 
 
 def build_path(args):
@@ -141,6 +141,7 @@ def main(argv, ctx=None, prog=PROG):
     if not args.command:
         parser.print_help()
         return 2
+    args.command = context.canonical_command(args.command)
     ctx.check_session_command(args.command)
     args.ctx = ctx
     return args.func(Jenkins(getattr(args, "url", None)), args)
