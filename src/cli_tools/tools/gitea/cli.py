@@ -2,7 +2,10 @@
 import argparse
 import json
 import os
+import sys
 import time
+import urllib.parse
+from pathlib import Path
 
 from cli_tools.core import api, context, http, output
 from cli_tools.core.errors import ToolError
@@ -81,6 +84,43 @@ def cmd_mine(g, args):
     output.print_rows(rows[:limit], args.table, args.ctx.json_mode, api.MINE_COLUMNS)
 
 
+def repository(value):
+    owner, _, name = value.partition("/")
+    if not owner or not name or "/" in name:
+        raise argparse.ArgumentTypeError("expected OWNER/REPO, e.g. team/service")
+    return "/".join(urllib.parse.quote(part, safe="") for part in (owner, name))
+
+
+def read_text(path):
+    try:
+        return sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise ToolError(f"Could not read {path}: {e}") from None
+
+
+def cmd_pr_create(g, args):
+    args.ctx.require_writes("pr create")
+    base = args.base
+    if not base:
+        _, raw, _ = g.call("GET", f"repos/{args.repo}", None)
+        base = (http.parse_json(raw, "Reading the repository") or {}).get("default_branch")
+        if not base:
+            raise ToolError(f"repos/{args.repo} has no default branch; pass --base")
+    body = read_text(args.body_file) if args.body_file else args.body
+    path, request = f"repos/{args.repo}/pulls", {"head": args.head, "base": base, "title": args.title, "body": body}
+    if args.dry_run:
+        print(json.dumps({"method": "POST", "path": path, "body": request}, ensure_ascii=False, indent=2))
+        return
+    _, raw, _ = g.call("POST", path, json.dumps(request))
+    created = http.parse_json(raw, "Opening the pull request")
+    result = {"number": created.get("number"), "url": created.get("html_url")}
+    if args.ctx.json_mode:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        info(output.err.green("✓ ") + f"Opened pull request #{result['number']}")
+        print(result["url"])
+
+
 def build_parser(prog=PROG):
     epilog = f"""\
 examples:
@@ -130,6 +170,18 @@ for scripts and AI agents (any position on the command line):
                    help="print the access token (renewed if it expired)").set_defaults(func=cmd_token)
     api.add_mine_parser(sub, cmd_mine, "issues and pull requests assigned to you, then the pull requests waiting for your "
                                         "review and the ones you opened, in every repository")
+    pr = sub.add_parser("pr", help="pull requests: pr create").add_subparsers(dest="pr_command", metavar="COMMAND",
+                                                                               required=True)
+    p = pr.add_parser("create", help="open a pull request (try it with --dry-run first)")
+    p.add_argument("--repo", required=True, type=repository, metavar="OWNER/REPO")
+    p.add_argument("--head", required=True, help="the branch with the changes")
+    p.add_argument("--base", help="the branch to merge into (default: the repository's default branch)")
+    p.add_argument("--title", required=True)
+    body = p.add_mutually_exclusive_group()
+    body.add_argument("--body", default="", help="the description, as Markdown")
+    body.add_argument("--body-file", metavar="PATH", help="read the description from a file, or - for stdin")
+    p.add_argument("--dry-run", action="store_true", help="print the request and open nothing")
+    p.set_defaults(func=cmd_pr_create)
     api.add_api_parser(sub, prog, "repos/<owner>/<repo>/pulls", lambda g, args: api.run_api(args, g.call, args.ctx))
     return parser
 

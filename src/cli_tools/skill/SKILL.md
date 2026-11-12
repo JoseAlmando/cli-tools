@@ -31,7 +31,7 @@ Rules: reads with `--json --read-only`. Writes only after the user agrees, shown
 | GitHub: open PRs | `clt github --json --read-only GET "repos/<owner>/<repo>/pulls?state=open&per_page=100" --fields number,title,head.ref --all --table` |
 | GitHub: CI of a commit | `clt github --json --read-only GET "repos/<owner>/<repo>/commits/<sha or branch>/check-runs" -r \| jq -r '.check_runs[] \| [.name, .conclusion] \| @tsv'` |
 | Gitea: open PRs | `clt gitea --json --read-only GET "repos/<owner>/<repo>/pulls?state=open" --fields number,title,head.ref,mergeable --all --table` |
-| Taiga: story or issue by ref | `clt taiga --json --read-only GET "userstories/by_ref?ref=<ref>&project=<project-id>" --fields id,version,status_extra_info.name` |
+| Taiga: story, task or issue by ref | `clt taiga --json --read-only issue <ref> --project <slug>` (id, version, status, description; `mine` gives ref and slug) |
 | Taiga: change a status | `clt taiga --json PATCH userstories/<id> -d '{"status": <status-id>, "version": <version>}' --dry-run` (ids from `references/taiga.md`) |
 | Release | `clt release --json --dry-run --bump <fix\|feat\|major>` (`references/release.md`) |
 

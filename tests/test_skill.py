@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "src" / "cli_tools" / "skill"
 REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md", "github": "references/github.md",
               "taiga": "references/taiga.md", "gitea": "references/gitea.md", "jenkins": "references/jenkins.md"}
-COMMANDS = {"login", "me", "issue", "mine", "wiql", "jobs", "build", "log", "queue",
+COMMANDS = {"login", "me", "issue", "mine", "wiql", "jobs", "build", "log", "queue", "pr",
             "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
-WRITES = ("POST", "PUT", "PATCH", "DELETE")
+WRITES = ("POST", "PUT", "PATCH", "DELETE", "pr")  # pr: gitea pr create
 FLAGS = {"--json", "--read-only"}
 
 

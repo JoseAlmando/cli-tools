@@ -5,6 +5,7 @@ import os
 import time
 import unittest
 import urllib.parse
+from pathlib import Path
 from unittest import mock
 
 from cli_tools.core import credentials
@@ -12,6 +13,7 @@ from cli_tools.core.errors import HttpError, ToolError
 from cli_tools.tools.gitea import auth, client
 from cli_tools.tools.gitea import cli as gitea
 from tests.helpers import TempConf
+from tests.test_contracts import run_inline
 
 
 class PkceTests(unittest.TestCase):
@@ -102,6 +104,51 @@ class GiteaTests(TempConf):
         self.client()
         self.assertEqual(gitea.main(["logout"]), None)
         self.assertIsNone(credentials.read_json_file(gitea.Gitea("https://gitea.example.com").credentials_file))
+
+
+GITEA = "https://gitea.example.com"
+PULLS = ("POST", f"{GITEA}/api/v1/repos/o/r/pulls")
+CREATED = (201, json.dumps({"number": 7, "html_url": f"{GITEA}/o/r/pulls/7"}), {})
+
+
+class GiteaPrTests(TempConf):
+    def setUp(self):
+        super().setUp()
+        os.environ.update(GITEA_URL=GITEA, GITEA_TOKEN="t")
+
+    def pr(self, *argv, routes=None, stdin=""):
+        return run_inline("clt", "gitea", "--json", "pr", "create", "--repo", "o/r", "--head", "feature/x",
+                          "--title", "Add x", *argv, routes=routes, stdin=stdin)
+
+    def test_create_opens_the_pull_request_with_a_body_from_a_file(self):
+        body = Path(self.tmp.name) / "pr.md"
+        body.write_text("Closes #3\n", encoding="utf-8")
+        code, out, err, sent = self.pr("--base", "main", "--body-file", str(body), routes={PULLS: CREATED})
+        self.assertEqual((code, json.loads(out), err), (0, {"number": 7, "url": f"{GITEA}/o/r/pulls/7"}, ""))
+        self.assertEqual(json.loads(sent[0].data), {"head": "feature/x", "base": "main", "title": "Add x",
+                                                    "body": "Closes #3\n"})
+
+    def test_the_base_defaults_to_the_default_branch_and_the_body_can_come_from_stdin(self):
+        routes = {("GET", f"{GITEA}/api/v1/repos/o/r"): (200, '{"default_branch": "develop"}', {}), PULLS: CREATED}
+        code, _, _, sent = self.pr("--body-file", "-", routes=routes, stdin="From stdin")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(sent[1].data)["base"], "develop")
+        self.assertEqual(json.loads(sent[1].data)["body"], "From stdin")
+
+    def test_dry_run_prints_the_request_and_sends_no_write(self):
+        code, out, _, sent = self.pr("--base", "main", "--body", "Text", "--dry-run")
+        self.assertEqual((code, sent), (0, []))
+        self.assertEqual(json.loads(out), {"method": "POST", "path": "repos/o/r/pulls",
+                                           "body": {"head": "feature/x", "base": "main", "title": "Add x",
+                                                    "body": "Text"}})
+
+    def test_read_only_blocks_it_and_a_bad_repo_is_wrong_usage(self):
+        code, _, _, sent = run_inline("clt", "gitea", "--json", "--read-only", "pr", "create", "--repo", "o/r",
+                                      "--head", "x", "--title", "t", "--base", "main")
+        self.assertEqual((code, sent), (4, []))
+        code, _, _, sent = run_inline("clt", "gitea", "pr", "create", "--repo", "just-a-name", "--head", "x",
+                                      "--title", "t")
+        self.assertEqual((code, sent), (2, []))
 
 
 if __name__ == "__main__":

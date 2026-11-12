@@ -15,7 +15,7 @@ clt gitea --json --read-only GET "repos/<owner>/<repo>/branches?limit=50" --fiel
 ## Write
 
 ```bash
-jq -n --rawfile body pr.md '{title: "<title>", head: "<branch>", base: "<base>", body: $body}' | clt gitea --json POST "repos/<owner>/<repo>/pulls" -d @- --dry-run
+clt gitea --json pr create --repo <owner>/<repo> --head <branch> --title "<title>" --body-file pr.md --dry-run   # --base: default branch
 clt gitea --json POST "repos/<owner>/<repo>/pulls/<n>/reviews" -d @review.json --dry-run
 clt gitea --json POST "repos/<owner>/<repo>/pulls/<n>/comments/<comment id>/replies" -d '{"body": "Fixed in abc1234."}' --dry-run
 clt gitea --json POST "repos/<owner>/<repo>/pulls/<n>/merge" -d '{"Do": "merge"}' --dry-run

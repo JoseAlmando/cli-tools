@@ -64,11 +64,12 @@ clt taiga login --url https://taiga.example.com # the first time; the server is 
 clt taiga me                                    # same as: clt t me
 clt taiga GET "userstories?project=<id>"
 clt taiga mine                                  # your open stories, tasks and issues, one line each
+clt taiga issue 12 --project web                # one of them by its ref (or set TAIGA_PROJECT)
 
 clt gitea login --url https://gitea.example.com # opens the browser
 clt gitea login --source <source>               # go straight to a Gitea external login source
 clt gitea GET "repos/<owner>/<repo>/pulls?state=open"
-clt gitea POST repos/<owner>/<repo>/pulls -d @pr.json
+clt gitea pr create --repo <owner>/<repo> --head <branch> --title "<title>" --body-file pr.md --dry-run
 clt gitea mine                                  # assigned to you, waiting for your review, or opened by you
 
 export TAIGA_TOKEN="$(clt taiga token)"         # for other scripts
@@ -201,6 +202,7 @@ For tools with a configurable server URL, clt takes it in this order:
 | `TAIGA_URL`, `GITEA_URL` | Server, `https://` only. |
 | `TAIGA_CONF_DIR`, `GITEA_CONF_DIR` | Credentials folder; by default `~/.config/taiga` and `~/.config/gitea`. |
 | `TAIGA_CACERT`, `GITEA_CACERT` | Optional extra CA, for example an internal one; by default `ca.pem` in the credentials folder. |
+| `TAIGA_PROJECT` | Project slug for `clt taiga issue` when `--project` is not given. |
 | `GITEA_AUTH_SOURCE` | Gitea external login source to go straight to; empty means Gitea's own login page. |
 | `GITHUB_TOKEN`, `GH_TOKEN` | GitHub token to use instead of the saved session; it is used as it is and never renewed. |
 | `GITHUB_CONF_DIR` | GitHub credentials folder; by default `~/.config/github`. |

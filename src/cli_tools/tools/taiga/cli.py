@@ -68,6 +68,40 @@ MINE_KINDS = (("story", "userstories", "assigned_users"), ("task", "tasks", "ass
               ("issue", "issues", "assigned_to"))
 
 
+# What Taiga's resolver answers for a ref, the collection to read, the kind shown, and the web page's segment
+RESOLVED = (("us", "userstories", "story"), ("task", "tasks", "task"), ("issue", "issues", "issue"))
+
+
+def cmd_issue(t, args):
+    project = args.project or os.environ.get("TAIGA_PROJECT")
+    if not project:
+        raise ToolError("Which project? Pass --project <slug> or set TAIGA_PROJECT (mine shows it as where)")
+    _, raw, _ = t.call("GET", api.set_query("resolver", {"project": project, "ref": str(args.ref)}), None)
+    found = http.parse_json(raw, "Resolving the ref")
+    found = found if isinstance(found, dict) else {}
+    match = next(((key, collection, kind) for key, collection, kind in RESOLVED if found.get(key)), None)
+    if not match:
+        raise ToolError(f"No story, task or issue #{args.ref} in {project}")
+    key, collection, kind = match
+    _, raw, _ = t.call("GET", f"{collection}/{int(found[key])}", None)
+    item = http.parse_json(raw, f"Reading the {kind}")
+    if not isinstance(item, dict):
+        raise ToolError(f"Unexpected response from {collection}/{found[key]}")
+    summary = {"kind": kind, "ref": item.get("ref"), "id": item.get("id"), "version": item.get("version"),
+               "subject": item.get("subject"), "status": (item.get("status_extra_info") or {}).get("name"),
+               "assigned_to": (item.get("assigned_to_extra_info") or {}).get("full_name_display"),
+               "project": (item.get("project_extra_info") or {}).get("slug") or project,
+               "url": f"{t.url}/project/{project}/{key}/{args.ref}", "description": item.get("description") or ""}
+    if args.ctx.json_mode:
+        print(json.dumps(summary, ensure_ascii=False))
+        return
+    print(f"{kind} #{summary['ref']} {summary['subject'] or ''}")
+    print(" · ".join(str(value) for value in (summary["status"], summary["assigned_to"], summary["project"]) if value))
+    print(summary["url"])
+    if summary["description"]:
+        print("\n" + summary["description"])
+
+
 def cmd_mine(t, args):
     _, raw, _ = t.call("GET", "users/me", None)
     me = http.parse_json(raw, "Getting the user")
@@ -91,6 +125,7 @@ examples:
   {prog} login --url https://taiga.example.com      # the first time; after that, {prog} login is enough
   {prog} me
   {prog} mine                                    # open user stories, tasks and issues assigned to you
+  {prog} issue 12 --project web                  # one of them by its ref (mine's id and where)
   {prog} GET "userstories?project=<id>"
   {prog} GET "userstories?project=<id>&page=2" -i   # see the x-pagination-* headers
   {prog} PATCH userstories/123 -d '{{"version": 4, "subject": "New title"}}'
@@ -100,6 +135,7 @@ examples:
 environment variables:
   TAIGA_URL         server, https only; if unset, the last session's
   TAIGA_TOKEN       use this token instead of the saved session (not renewed)
+  TAIGA_PROJECT     project slug for issue, when --project is not given
   TAIGA_CONF_DIR    credentials folder (default ~/.config/taiga)
   TAIGA_CACERT      extra CA (default ca.pem in the credentials folder)
   NO_COLOR          turns colors off
@@ -126,6 +162,11 @@ for scripts and AI agents (any position on the command line):
     sub.add_parser("logout", aliases=context.command_aliases("logout"), help="delete the saved credentials").set_defaults(func=cmd_logout)
     sub.add_parser("me", help="show the logged-in user").set_defaults(func=cmd_me)
     sub.add_parser("token", aliases=context.command_aliases("token"), help="print the access token").set_defaults(func=cmd_token)
+    p = sub.add_parser("issue", aliases=context.command_aliases("issue"),
+                       help="one user story, task or issue by its ref, with its description")
+    p.add_argument("ref", type=int, metavar="REF", help="the ref, as mine shows it in its id column")
+    p.add_argument("--project", help="project slug (mine's where column); default TAIGA_PROJECT")
+    p.set_defaults(func=cmd_issue)
     api.add_mine_parser(sub, cmd_mine, "user stories, tasks and issues assigned to you, in every project")
     api.add_api_parser(sub, prog, "userstories?project=<id>", lambda t, args: api.run_api(args, t.call, args.ctx))
     return parser
