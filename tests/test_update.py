@@ -2,7 +2,10 @@ import contextlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -113,9 +116,14 @@ class UpdateTests(TempConf):
 
     def test_on_windows_it_continues_in_the_background_with_a_log(self):
         with mock.patch.object(update, "on_windows", lambda: True), \
+                mock.patch.object(update, "base_python", lambda: "/base/python"), \
                 mock.patch.object(update.tempfile, "gettempdir", lambda: self.tmp.name):
             code, _, err = self.update()
         self.assertEqual(code, 0)
+        # The base interpreter, outside clt's environment, waits for this clt to exit before the installer runs
+        argv = self.popen.call_args[0][0]
+        self.assertEqual(argv[:4], ["/base/python", "-I", "-c", update.WAIT_THEN_RUN])
+        self.assertEqual(argv[4:], [str(os.getpid()), "/usr/bin/uv", "tool", "install", "--force", URL])
         kwargs = self.popen.call_args[1]
         self.assertEqual(kwargs["creationflags"], update.DETACHED_PROCESS | update.CREATE_NEW_PROCESS_GROUP)
         log = Path(self.tmp.name) / "clt-update.log"
@@ -191,6 +199,21 @@ class UpdateTests(TempConf):
         with self.assertRaises(errors.ReadOnlyError):
             self.update(env={"CLT_READONLY": "1"})
         self.run_.assert_not_called()
+
+
+class WaitThenRunTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "the waiting script uses the Windows API")
+    def test_the_installer_starts_only_after_clt_exits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stamp = Path(tmp) / "stamp"
+            started = time.time()
+            clt = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(1.5)"])  # stands for clt
+            write = f"import time; open({str(stamp)!r}, 'w').write(str(time.time()))"  # stands for the installer
+            done = subprocess.run([sys.executable, "-I", "-c", update.WAIT_THEN_RUN, str(clt.pid),
+                                   sys.executable, "-c", write], timeout=60)
+            clt.wait()
+            self.assertEqual(done.returncode, 0)
+            self.assertGreaterEqual(float(stamp.read_text()) - started, 1.5)
 
 
 if __name__ == "__main__":

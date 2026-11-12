@@ -24,8 +24,27 @@ DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 
 
+# Windows: run by the base interpreter, outside clt's environment, as "WAIT_THEN_RUN <clt's pid> <installer...>".
+# It waits for clt to exit, because the installer cannot remove a folder whose python.exe is still running.
+WAIT_THEN_RUN = """\
+import ctypes, subprocess, sys, time
+kernel32 = ctypes.windll.kernel32
+handle = kernel32.OpenProcess(0x00100000, False, int(sys.argv[1]))  # SYNCHRONIZE
+if handle:
+    kernel32.WaitForSingleObject(handle, 120000)
+    kernel32.CloseHandle(handle)
+time.sleep(1)  # the clt.exe launcher exits just after its python
+sys.exit(subprocess.run(sys.argv[2:]).returncode)
+"""
+
+
 def on_windows():
     return os.name == "nt"
+
+
+def base_python():
+    """The interpreter clt's environment was made from; it lives outside that environment."""
+    return getattr(sys, "_base_executable", None) or sys.executable
 
 
 def installed_version():
@@ -162,14 +181,16 @@ def main(argv, ctx=None, prog="clt update"):
     show(notes)
     info(f"Installing clt {target} (now {installed})…")
     if on_windows():
-        # A running clt.exe cannot be replaced: let the installer finish after this process exits, into a log
+        # A running clt cannot be replaced: the installer starts once this process has exited, and writes a log
         log = Path(tempfile.gettempdir()) / "clt-update.log"
         with open(log, "w", encoding="utf-8") as out:
-            subprocess.Popen(command, stdout=out, stderr=subprocess.STDOUT,
-                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
-        info(f"The update continues in the background (its output goes to {log}); run "
-             f"{output.err.bold('clt --version')} in a few seconds, then {output.err.bold('clt skill refresh')} "
-             "if you installed the skill.")
+            subprocess.Popen([base_python(), "-I", "-c", WAIT_THEN_RUN, str(os.getpid()), *command], stdout=out,
+                             stderr=subprocess.STDOUT, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                             close_fds=True)
+        info(f"The update continues in the background once this command ends; its output goes to {log}. When that "
+             f"file ends with \"Installed\" (about half a minute), run {output.err.bold('clt --version')}, then "
+             f"{output.err.bold('clt skill refresh')} if you installed the skill. Running clt before then can "
+             "interrupt the update.")
         report(ctx, installed, available[0], target, "started", notes)
         return 0
     code = subprocess.run(command).returncode
