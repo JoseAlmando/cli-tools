@@ -107,7 +107,7 @@ Put it in `src/cli_tools/commands/` (a module, or a package when it needs helper
 ## Development
 
 ```bash
-uv tool install -e .                                        # clt, taiga and gitea run this checkout
+uv tool install -e .                                        # clt runs this checkout
 PYTHONPATH=src python3 -m unittest discover -s tests -t .   # python on Windows
 uvx ruff@0.17.3 check .                                            # lint (Ruff is a development dependency only)
 ```
