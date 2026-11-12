@@ -2,7 +2,9 @@ import contextlib
 import io
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from cli_tools.commands import update
@@ -14,7 +16,8 @@ NOTES_10 = "### Breaking changes\n\n- feat!: drop a flag\n\n### Features\n\n- fe
 NOTES_2 = "### Fixes\n\n- fix: two\n\n### Other\n\n- ci: two"
 RELEASES = json.dumps([{"tag_name": "v0.2.0", "body": NOTES_2}, {"tag_name": "v0.10.0", "body": NOTES_10},
                        {"tag_name": "v0.1.0", "body": "### Features\n\n- feat: one"}, {"tag_name": "nightly"}])
-INSTALLED = {"installed": True, "editable": False, "path": None}
+INSTALLED = {"installed": True, "editable": False, "path": None, "installer": "uv"}
+URL = "git+https://github.com/JoseAlmando/cli-tools@v0.10.0"
 
 
 class UpdateTests(TempConf):
@@ -65,11 +68,11 @@ class UpdateTests(TempConf):
 
     def test_installs_the_latest_or_a_given_older_version(self):
         self.update()
-        self.assertEqual(self.run_.call_args_list[0][0][0], update.install_command("0.10.0"))
+        self.assertEqual(self.run_.call_args_list[0][0][0], ["/usr/bin/uv", "tool", "install", "--force", URL])
         self.run_.reset_mock()
         self.update("v0.1.0")
         self.assertEqual(self.run_.call_args_list[0][0][0],
-                         ["uv", "tool", "install", "--force", "git+https://github.com/JoseAlmando/cli-tools@v0.1.0"])
+                         ["/usr/bin/uv", "tool", "install", "--force", "git+https://github.com/JoseAlmando/cli-tools@v0.1.0"])
 
     def test_an_unknown_version_lists_the_available_ones(self):
         with self.assertRaisesRegex(ToolError, "0.10.0, 0.2.0, 0.1.0"):
@@ -80,20 +83,46 @@ class UpdateTests(TempConf):
         self.assertIn("already on 0.2.0", err)
         self.run_.assert_not_called()
 
-    def test_without_uv_it_prints_the_commands(self):
+    def test_without_uv_it_prints_the_command(self):
         with mock.patch.object(update.shutil, "which", lambda name: None):
             with self.assertRaises(ToolError) as caught:
                 self.update()
-        self.assertIn("uv tool install --force git+https://github.com/JoseAlmando/cli-tools@v0.10.0", str(caught.exception))
-        self.assertIn("pipx install --force git+https://github.com/JoseAlmando/cli-tools@v0.10.0", str(caught.exception))
+        self.assertIn(f"uv tool install --force {URL}", str(caught.exception))
+        self.assertNotIn("pipx", str(caught.exception))  # a second installer would leave two copies
 
-    def test_on_windows_it_continues_in_the_background(self):
-        with mock.patch.object(update, "on_windows", lambda: True):
+    def test_a_pipx_install_is_updated_with_pipx(self):
+        with mock.patch.object(update, "install_info", lambda: {**INSTALLED, "installer": "pipx"}), \
+                mock.patch.object(update.shutil, "which", lambda name: f"/usr/bin/{name}"):
+            self.update()
+        self.assertEqual(self.run_.call_args_list[0][0][0], ["/usr/bin/pipx", "install", "--force", URL])
+
+    def test_a_pip_install_says_what_to_run_and_runs_nothing(self):
+        with mock.patch.object(update, "install_info", lambda: {**INSTALLED, "installer": "pip"}), \
+                self.assertRaises(ToolError) as caught:
+            self.update()
+        self.assertIn(f"-m pip install --upgrade {URL}", str(caught.exception))
+        self.run_.assert_not_called()
+        self.popen.assert_not_called()
+
+    def test_the_installer_is_told_by_the_files_in_the_environment(self):
+        for marker, expected in (("uv-receipt.toml", "uv"), ("pipx_metadata.json", "pipx"), (None, "pip")):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as prefix:
+                if marker:
+                    (Path(prefix) / marker).write_text("")
+                self.assertEqual(update.installer(prefix), expected)
+
+    def test_on_windows_it_continues_in_the_background_with_a_log(self):
+        with mock.patch.object(update, "on_windows", lambda: True), \
+                mock.patch.object(update.tempfile, "gettempdir", lambda: self.tmp.name):
             code, _, err = self.update()
         self.assertEqual(code, 0)
-        flags = self.popen.call_args[1]["creationflags"]
-        self.assertEqual(flags, update.DETACHED_PROCESS | update.CREATE_NEW_PROCESS_GROUP)
+        kwargs = self.popen.call_args[1]
+        self.assertEqual(kwargs["creationflags"], update.DETACHED_PROCESS | update.CREATE_NEW_PROCESS_GROUP)
+        log = Path(self.tmp.name) / "clt-update.log"
+        self.assertEqual((Path(kwargs["stdout"].name), kwargs["stderr"]), (log, update.subprocess.STDOUT))
+        self.assertTrue(kwargs["stdout"].closed)  # the child keeps its own handle
         self.assertIn("background", err)
+        self.assertIn(str(log), err)
         self.run_.assert_not_called()
 
     def test_elsewhere_it_returns_the_installer_exit_code(self):

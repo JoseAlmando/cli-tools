@@ -6,9 +6,11 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 from importlib import metadata
+from pathlib import Path
 
 from cli_tools import __version__
 from cli_tools.core import agents, context, http, output
@@ -69,21 +71,37 @@ def show(found):
         info(f"\n{output.err.bold(change['version'])}\n{change['notes'].replace('### ', '')}")
 
 
+def installer(prefix=None):
+    """What installed clt's environment: uv tool and pipx leave a file at its root; anything else is pip."""
+    prefix = Path(prefix or sys.prefix)
+    if (prefix / "uv-receipt.toml").is_file():
+        return "uv"
+    if (prefix / "pipx_metadata.json").is_file():
+        return "pipx"
+    return "pip"
+
+
 def install_info():
     """How clt is installed: editable (development) installs record it in direct_url.json (PEP 610)."""
     try:
         dist = metadata.distribution("cli-tools")
     except metadata.PackageNotFoundError:
-        return {"installed": False, "editable": False, "path": None}
+        return {"installed": False, "editable": False, "path": None, "installer": None}
     direct = json.loads(dist.read_text("direct_url.json") or "{}")
     editable = bool(direct.get("dir_info", {}).get("editable"))
     url = direct.get("url", "")
     path = urllib.request.url2pathname(urllib.parse.urlsplit(url).path) if url.startswith("file:") else None
-    return {"installed": True, "editable": editable, "path": path}
+    return {"installed": True, "editable": editable, "path": path, "installer": installer()}
 
 
-def install_command(version):
-    return ["uv", "tool", "install", "--force", f"git+https://github.com/{REPO}@v{version}"]
+def install_command(version, tool="uv"):
+    """The command that reinstalls clt with the installer that installed it, so there is never a second copy."""
+    url = f"git+https://github.com/{REPO}@v{version}"
+    if tool == "pipx":
+        return ["pipx", "install", "--force", url]
+    if tool == "pip":
+        return [sys.executable, "-m", "pip", "install", "--upgrade", url]
+    return ["uv", "tool", "install", "--force", url]
 
 
 def report(ctx, installed, latest, target, action, notes=()):
@@ -132,18 +150,26 @@ def main(argv, ctx=None, prog="clt update"):
         report(ctx, installed, available[0], target, "none")
         return 0
 
-    command = install_command(target)
-    if not shutil.which("uv"):
-        raise ToolError("uv is not installed; install the version with one of:\n  " + " ".join(command) +
-                        f"\n  pipx install --force git+https://github.com/{REPO}@v{target}")
+    command = install_command(target, how["installer"])
+    if how["installer"] == "pip":  # pip has no "tool" to reinstall from, and on Windows it cannot replace clt.exe
+        raise ToolError("clt was installed with pip; update it with:\n  " + " ".join(command))
+    program = shutil.which(command[0])
+    if not program:
+        raise ToolError(f"{command[0]} installed clt but is not on the PATH now; install the version with:\n  "
+                        + " ".join(command))
+    command[0] = program
     notes = changes(found, installed, target)
     show(notes)
     info(f"Installing clt {target} (now {installed})…")
     if on_windows():
-        # A running clt.exe cannot be replaced: let uv finish after this process exits
-        subprocess.Popen(command, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
-        info(f"The update continues in the background; run {output.err.bold('clt --version')} in a few seconds, "
-             f"then {output.err.bold('clt skill refresh')} if you installed the skill.")
+        # A running clt.exe cannot be replaced: let the installer finish after this process exits, into a log
+        log = Path(tempfile.gettempdir()) / "clt-update.log"
+        with open(log, "w", encoding="utf-8") as out:
+            subprocess.Popen(command, stdout=out, stderr=subprocess.STDOUT,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
+        info(f"The update continues in the background (its output goes to {log}); run "
+             f"{output.err.bold('clt --version')} in a few seconds, then {output.err.bold('clt skill refresh')} "
+             "if you installed the skill.")
         report(ctx, installed, available[0], target, "started", notes)
         return 0
     code = subprocess.run(command).returncode
