@@ -136,6 +136,36 @@ class SkillCommandTests(TempConf):
         self.assertTrue((self.claude() / ".clt-skill").is_file())
         self.assertEqual(sorted(p.name for p in self.claude().parent.iterdir()), ["clt"])
 
+    def test_a_briefly_locked_folder_is_renamed_on_a_later_try(self):
+        real = Path.rename
+        denied = []
+
+        def rename(source, destination):
+            if Path(destination) == self.claude() and len(denied) < 2:  # e.g. an antivirus scanning the new files
+                denied.append(source)
+                raise PermissionError(13, "Access is denied")
+            return real(source, destination)
+
+        with mock.patch.object(Path, "rename", rename), mock.patch("time.sleep") as sleep:
+            code, result, _ = self.run_skill("install", "--agent", "claude")
+        self.assertEqual((code, len(denied), sleep.call_count), (0, 2, 2))
+        self.assertTrue((self.claude() / ".clt-skill").is_file())
+
+    def test_a_folder_that_stays_locked_fails_and_keeps_the_old_copy(self):
+        self.run_skill("install", "--agent", "claude")
+        (self.claude() / "SKILL.md").write_text("old copy")
+        real = Path.rename
+
+        def rename(source, destination):
+            if Path(destination) == self.claude() and Path(source).name == "clt":
+                raise PermissionError(13, "Access is denied")
+            return real(source, destination)
+
+        with mock.patch.object(Path, "rename", rename), mock.patch("time.sleep"), \
+                self.assertRaisesRegex(ToolError, "Access is denied"):
+            self.run_skill("install", "--agent", "claude")
+        self.assertEqual((self.claude() / "SKILL.md").read_text(), "old copy")
+
     def test_filesystem_errors_are_tool_errors(self):
         (self.home / ".claude").mkdir()
         (self.home / ".claude" / "skills").write_text("not a folder")

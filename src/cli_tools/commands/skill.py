@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 from cli_tools import __version__, skill_dir
@@ -36,6 +37,17 @@ def _remove(path):
         shutil.rmtree(path)
 
 
+def _rename(source, destination, delays=(0.1, 0.2, 0.4, 0.8)):
+    """Windows refuses to rename a folder while another process, usually an antivirus scanning files just written,
+    has one of them open; that lasts a moment, so try again a few times before giving up."""
+    for delay in delays:
+        try:
+            return source.rename(destination)
+        except PermissionError:
+            time.sleep(delay)
+    return source.rename(destination)
+
+
 def _replace(path, make):
     work = None
     try:
@@ -48,7 +60,7 @@ def _replace(path, make):
             aside = work / "old"
             path.rename(aside)
         try:
-            staging.rename(path)
+            _rename(staging, path)
         except OSError:
             if aside is not None:
                 aside.rename(path)
