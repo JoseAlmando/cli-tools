@@ -1,7 +1,23 @@
 """What the tools print: colors (only on a terminal, never with NO_COLOR), messages and API responses."""
+import argparse
 import json
 import os
 import sys
+
+
+class HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Every parser's formatter. argparse sizes the help column without the extra indent of the commands it lists,
+    so a long command name (uninstall, refresh (rfh)) pushes its help onto the next line; this counts that indent."""
+
+    def add_argument(self, action):
+        super().add_argument(action)
+        # ponytail: reads argparse's private sizing fields, stable since Python 3.2; drop it if argparse fixes this
+        get_subactions = getattr(action, "_get_subactions", None)  # only on the action that lists commands
+        subactions = list(get_subactions()) if get_subactions and action.help is not argparse.SUPPRESS else []
+        if subactions:
+            longest = max(len(self._format_action_invocation(sub)) for sub in subactions)
+            self._action_max_length = max(self._action_max_length,
+                                          longest + self._current_indent + self._indent_increment)
 
 
 class Color:

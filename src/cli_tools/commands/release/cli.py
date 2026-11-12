@@ -406,7 +406,7 @@ projects: Python (pyproject.toml [project] version) and .NET (Directory.Build.pr
 with <Version>); other files with --version-file. Settings per repo in {CONFIG_FILE}:
   {{"release": {{"test_command": ["python", "-m", "pytest"], "test_env": {{}}, "version_file": "VERSION"}}}}
 """
-    parser = argparse.ArgumentParser(prog=prog, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter,
+    parser = argparse.ArgumentParser(prog=prog, epilog=epilog, formatter_class=output.HelpFormatter,
                                      description="Bump the version, update CHANGELOG.md, commit, tag, "
                                                  "and publish the release on GitHub or Gitea.")
     parser.add_argument("--bump", choices=versions.BUMPS, help="fix, feat or major (new version); skips the question")

@@ -115,7 +115,7 @@ Without credentials, requests use Jenkins' anonymous permissions. API tokens do 
 --read-only sends only GET requests and blocks login and logout. Both flags work anywhere.
 """ + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Jenkins Remote Access API.", epilog=epilog,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+                                     formatter_class=output.HelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     p = sub.add_parser("login", aliases=context.command_aliases("login"), help="check and save a Jenkins API token")
     p.add_argument("--url", help="Jenkins controller URL (defaults to JENKINS_URL or the saved URL)")
