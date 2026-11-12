@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.0 - 2026-11-12
+
+### Features
+
+- feat: clt completion prints Tab completion for bash, zsh, fish and PowerShell
+
+### Other
+
+- ci: zsh and fish for the completion tests, and a used-up rate limit as a warning
+
 ## 0.14.3 - 2026-11-12
 
 ### Fixes
