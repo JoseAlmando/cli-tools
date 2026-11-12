@@ -103,8 +103,9 @@ class ShellTests(unittest.TestCase):
     @unittest.skipUnless(BASH, "bash is not installed")
     def test_bash(self):
         python = Path(sys.executable).as_posix()
-        # The stand-in also shows what it received, for a failure on another shell version
-        shim = write(self.bin / "clt", '#!/usr/bin/env bash\nprintf "received: %s" "$CLT_COMPLETE" | od -c >&2\n'
+        # The stand-in also keeps what it received, for a failure on another shell version
+        received = self.bin / "received.txt"
+        shim = write(self.bin / "clt", f'#!/usr/bin/env bash\nprintf "%s" "$CLT_COMPLETE" | od -c >> "{received.as_posix()}"\n'
                                        f'exec "{python}" -m cli_tools "$@"\n')
         if os.name != "nt":
             shim.chmod(0o755)
@@ -114,7 +115,8 @@ class ShellTests(unittest.TestCase):
                        + "CLT_COMPLETE=$'release\\x1f--bump\\x1ff\\x1f' clt completion >&2; echo \"clt exit $?\" >&2\n")
         done = subprocess.run([BASH, "--noprofile", "--norc", script.as_posix()], capture_output=True, text=True,
                               env=self.env, timeout=120)
-        self.assertEqual(done.stdout.split(), ["feat", "fix"], done.stderr)
+        sent = received.read_text(encoding="utf-8") if received.exists() else "(clt was not run)"
+        self.assertEqual(done.stdout.split(), ["feat", "fix"], done.stderr + "\n" + sent)
 
     def posix_shim(self):
         write(self.bin / "clt", f'#!/bin/sh\nexec "{sys.executable}" -m cli_tools "$@"\n').chmod(0o755)
