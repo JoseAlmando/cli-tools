@@ -16,8 +16,9 @@ SEPARATOR = "\x1f"
 BASH = r"""# clt completion for bash: add to ~/.bashrc
 #   eval "$(clt completion bash)"
 _clt() {
-    local IFS=$'\n'
-    COMPREPLY=($(CLT_COMPLETE="$(printf '%s\x1f' "${COMP_WORDS[@]:1:COMP_CWORD}")" clt completion 2>/dev/null))
+    local IFS=$'\n' typed="" word
+    for word in "${COMP_WORDS[@]:1:COMP_CWORD}"; do typed+="$word"$'\x1f'; done  # bash 3.2 (macOS) too
+    COMPREPLY=($(CLT_COMPLETE="$typed" clt completion 2>/dev/null))
 }
 complete -o default -F _clt clt
 """

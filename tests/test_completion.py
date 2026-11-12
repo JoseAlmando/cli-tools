@@ -107,7 +107,8 @@ class ShellTests(unittest.TestCase):
         if os.name != "nt":
             shim.chmod(0o755)
         script = write(self.bin / "complete-test.bash", self.script("bash")
-                       + 'COMP_WORDS=(clt release --bump f); COMP_CWORD=3; _clt\nprintf "%s\\n" "${COMPREPLY[@]}"\n')
+                       + 'COMP_WORDS=(clt release --bump f); COMP_CWORD=3; _clt\nprintf "%s\\n" "${COMPREPLY[@]}"\n'
+                       + 'echo "bash $BASH_VERSION, clt: $(command -v clt)" >&2\n')
         done = subprocess.run([BASH, "--noprofile", "--norc", script.as_posix()], capture_output=True, text=True,
                               env=self.env, timeout=120)
         self.assertEqual(done.stdout.split(), ["feat", "fix"], done.stderr)
