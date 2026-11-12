@@ -130,15 +130,19 @@ def report(ctx, installed, latest, target, action, notes=()):
                           "changes": list(notes)}))
 
 
-def main(argv, ctx=None, prog="clt update"):
-    ctx = ctx or context.CLIContext.from_env()
+def build_parser(prog):
     parser = argparse.ArgumentParser(prog=prog, description="Install the latest release of clt, or a given one.",
                                      epilog=f"examples:\n  {prog} --check\n  {prog}\n  {prog} 0.2.0      # also older ones",
                                      formatter_class=output.HelpFormatter)
     parser.add_argument("version", nargs="?", metavar="VERSION", help="e.g. 0.2.0 or v0.2.0 (default: the latest)")
     parser.add_argument("--check", action="store_true",
                         help="only show the installed and the latest version, and what the newer ones bring")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv, ctx=None, prog="clt update"):
+    ctx = ctx or context.CLIContext.from_env()
+    args = build_parser(prog).parse_args(argv)
     installed = installed_version()
 
     if args.check:

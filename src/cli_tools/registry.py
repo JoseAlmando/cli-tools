@@ -13,6 +13,7 @@ TOOLS = (
     ("release", "cli_tools.commands.release.cli", "bump the version, update the changelog, tag and publish a release"),
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
     ("skill", "cli_tools.commands.skill", "install clt's skill for Claude Code, Codex or Gemini CLI"),
+    ("completion", "cli_tools.commands.completion", "print the Tab completion script for bash, zsh, fish or PowerShell"),
 )
 
 ALIASES = {"t": "taiga", "gt": "gitea", "gh": "github", "j": "jira", "ad": "azdo"}
