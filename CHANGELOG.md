@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 - 2026-11-12
+
+### Features
+
+- feat: clt taiga issue reads any ref, and clt gitea pr create opens a pull request
+
+### Other
+
+- test: build the release tests' repository once per class
+
 ## 0.13.0 - 2026-11-12
 
 ### Features
