@@ -158,10 +158,10 @@ class BrowserLoginTests(TempConf):
         with mock.patch.dict(os.environ, {"GITHUB_CLIENT_ID": "other"}):
             self.assertEqual(auth.client_id(), "other")
 
-    def test_browser_authorization_needs_an_oauth_app(self):
-        with mock.patch.object(auth, "DEFAULT_CLIENT_ID", ""), \
-                self.assertRaisesRegex(ToolError, "GITHUB_CLIENT_ID.*--create-token"):
-            self.login(["login", "--browser"], {}, env={})
+    def test_an_empty_client_id_variable_uses_the_built_in_app(self):
+        # So there is always an OAuth app, and the browser login is always offered first
+        with mock.patch.dict(os.environ, {"GITHUB_CLIENT_ID": ""}):
+            self.assertEqual(auth.client_id(), auth.DEFAULT_CLIENT_ID)
 
     def test_an_unknown_oauth_app_is_named(self):
         with self.assertRaisesRegex(ToolError, "client-123.*GITHUB_CLIENT_ID"):
@@ -191,13 +191,6 @@ class BrowserLoginTests(TempConf):
         with mock.patch.object(github.getpass, "getpass", lambda prompt: "pasted"):
             self.login(["login"], {USER: (200, '{"login": "b"}', {})}, stdin="2\n")
         self.assertEqual(self.saved_token(), {"token": "pasted"})
-
-    def test_without_an_oauth_app_the_menu_defaults_to_creating_a_token(self):
-        with mock.patch.object(auth, "DEFAULT_CLIENT_ID", ""), \
-                mock.patch.object(github.getpass, "getpass", lambda prompt: "pasted"):
-            err, _ = self.login(["login"], {USER: (200, '{"login": "b"}', {})}, stdin="\n", env={})
-        self.assertEqual(self.saved_token(), {"token": "pasted"})
-        self.assertIn("not set up", err)
 
     def test_browser_and_create_token_need_a_person(self):
         for flag in ("--browser", "--create-token"):

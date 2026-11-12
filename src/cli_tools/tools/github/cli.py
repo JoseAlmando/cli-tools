@@ -26,17 +26,14 @@ RULESETS = [
 # --- Commands -----------------------------------------------------------------
 
 def choose_login():
-    ready = bool(auth.client_id())
     info("How do you want to log in to GitHub?")
-    info("  [1] Authorize in the browser" + (" (recommended)" if ready else
-                                             " (not set up here: no OAuth app; see clt github login --help)"))
+    info("  [1] Authorize in the browser (recommended)")
     info("  [2] Create a token in the browser and paste it here")
     info("  [3] Paste a token you already have")
-    default = "1" if ready else "2"
     while True:
-        sys.stderr.write(f"Choice [{default}]: ")
+        sys.stderr.write("Choice [1]: ")
         sys.stderr.flush()
-        answer = sys.stdin.readline().strip() or default
+        answer = sys.stdin.readline().strip() or "1"
         if answer in ("1", "2", "3"):
             return {"1": "browser", "2": "create", "3": "paste"}[answer]
         info(output.err.yellow("Answer 1, 2 or 3."))

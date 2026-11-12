@@ -53,9 +53,6 @@ def device_login(cacert, open_browser=True):
     """The token response for the user who enters the code shown here at github.com/login/device: access_token and,
     when the OAuth app issues expiring tokens, expires_in, refresh_token and refresh_token_expires_in."""
     cid = client_id()
-    if not cid:
-        raise ToolError("Authorizing in the browser needs a GitHub OAuth app: set GITHUB_CLIENT_ID, "
-                        "or log in with --create-token")
     try:
         codes = _form_post(DEVICE_CODE_URL, {"client_id": cid, "scope": SCOPE}, cacert)
     except HttpError as e:
