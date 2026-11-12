@@ -585,6 +585,15 @@ class ApiCommandTests(TempConf):
                 out = " ".join(run_inline("clt", tool, "api", "--help")[1].split())  # argparse wraps the text
                 self.assertEqual("renews it and retries once" in out, renews)
 
+    def test_every_command_keeps_its_help_on_its_line(self):
+        for tool in ("taiga", "gitea", "github", "jira", "azdo", "jenkins", "skill"):
+            with self.subTest(tool=tool):
+                out = run_inline("clt", tool, "--help")[1]
+                listed = out.split("positional arguments:", 1)[1].split("\n\n", 1)[0].splitlines()[2:]
+                alone = [line for line in listed if line.startswith("    ") and len(line.split()) <= 2
+                         and not line.startswith("     ")]
+                self.assertEqual(alone, [], out)
+
     def test_each_tool_help_names_the_api_options(self):
         for tool in ("taiga", "gitea", "github", "jira", "azdo", "jenkins"):
             with self.subTest(tool=tool):

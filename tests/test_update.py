@@ -39,7 +39,8 @@ class UpdateTests(TempConf):
         mock.patch.object(update.shutil, "which", lambda name: "/usr/bin/uv").start()
         # The same outcome on every runner: Linux and macOS unless a test says otherwise
         mock.patch.object(update, "on_windows", lambda: False).start()
-        self.run_ = mock.patch.object(update.subprocess, "run", return_value=mock.Mock(returncode=0)).start()
+        self.run_ = mock.patch.object(update.subprocess, "run",
+                                      return_value=mock.Mock(returncode=0, stdout="", stderr="")).start()
         self.popen = mock.patch.object(update.subprocess, "Popen").start()
 
     def update(self, *argv, env=None):
@@ -139,9 +140,28 @@ class UpdateTests(TempConf):
 
     def test_a_successful_update_refreshes_the_skill_copies(self):
         with mock.patch.object(update.shutil, "which", lambda name: f"/x/{name}"):
-            self.update()
+            self.update(env={"CLT_JSON": "1"})
         self.assertEqual(self.run_.call_args_list[1][0][0], ["/x/clt", "skill", "refresh"])
-        self.assertIsNotNone(self.run_.call_args_list[1][1].get("stdout"))
+        kwargs = self.run_.call_args_list[1][1]
+        self.assertTrue(kwargs.get("capture_output"))
+        self.assertNotIn("CLT_JSON", kwargs["env"])  # its output is shown on stderr, as text, not as a JSON line
+
+    def test_the_refresh_runs_the_clt_that_was_just_updated(self):
+        running = Path(self.tmp.name) / "bin" / "clt"
+        running.parent.mkdir()
+        running.write_text("")
+        with mock.patch.object(update.sys, "argv", [str(running)]), \
+                mock.patch.object(update.shutil, "which", lambda name: f"/elsewhere/{name}"):
+            self.update()
+        self.assertEqual(self.run_.call_args_list[1][0][0], [str(running), "skill", "refresh"])
+
+    def test_a_refresh_that_fails_says_so_instead_of_showing_its_output(self):
+        self.run_.side_effect = [mock.Mock(returncode=0),
+                                 mock.Mock(returncode=2, stdout="", stderr="usage: clt [-h] TOOL\nclt: error: skill")]
+        with mock.patch.object(update.shutil, "which", lambda name: f"/x/{name}"):
+            _, _, err = self.update()
+        self.assertIn("not refreshed", err)
+        self.assertNotIn("usage:", err)
 
     def test_a_successful_update_recommends_the_skill_for_agents_without_it(self):
         with mock.patch.object(update.agents, "recommend_skill") as recommend:

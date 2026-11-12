@@ -110,6 +110,38 @@ class SkillCommandTests(TempConf):
                 self.assertTrue(own.exists() or own.is_symlink())
         self.assertTrue(other.is_dir())
 
+    def test_several_agents_change_nothing_when_one_target_is_foreign(self):
+        foreign = self.agents()  # codex and gemini read it
+        foreign.mkdir(parents=True)
+        (foreign / "mine.md").write_text("mine")
+        with self.assertRaises(ToolError):
+            self.run_skill("install", "--agent", "claude", "--agent", "codex")
+        self.assertFalse(self.claude().exists())
+        self.run_skill("install", "--agent", "claude")
+        with self.assertRaises(ToolError):
+            self.run_skill("uninstall", "--agent", "claude", "--agent", "codex")
+        self.assertTrue((self.claude() / "SKILL.md").is_file())
+        self.assertEqual((foreign / "mine.md").read_text(), "mine")
+
+    def test_refresh_without_copies_says_there_were_none(self):
+        _, _, err = self.run_skill("refresh", ctx=context.CLIContext())
+        self.assertIn("No copies of the skill to refresh", err)
+
+    def test_link_from_an_installed_clt_is_refused(self):
+        installed = Path(self.tmp.name) / "venv" / "Lib" / "site-packages" / "cli_tools" / "skill"
+        with mock.patch.object(skill(), "skill_dir", lambda: installed), \
+                self.assertRaisesRegex(ToolError, "^--link needs a checkout"):
+            self.run_skill("install", "--agent", "claude", "--link")
+        self.assertFalse(self.claude().exists())
+
+    def test_help_keeps_each_command_on_one_line(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+            skill().main(["--help"])
+        lines = out.getvalue().splitlines()
+        self.assertTrue(any(line.split()[:1] == ["uninstall"] and "remove the skill" in line for line in lines),
+                        out.getvalue())
+
     def test_a_foreign_sibling_is_left_alone(self):
         sibling = self.claude().parent / ".clt.new"
         sibling.mkdir(parents=True)

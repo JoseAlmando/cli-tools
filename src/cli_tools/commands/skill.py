@@ -90,11 +90,15 @@ def _unique(agents):
 
 
 def install(agents, link):
+    if link and "site-packages" in skill_dir().parts:
+        raise ToolError("--link needs a checkout (uv tool install -e .): this clt is installed in site-packages, "
+                        "which moves on every update; run it without --link to copy the skill")
+    for agent in _unique(agents):  # every target first, so a foreign one stops the install before any change
+        _check(target(agent))
     done, results = {}, []
     for agent in _unique(agents):
         path = target(agent)
         if path not in done:
-            _check(path)
             _replace(path, _link if link else _copy)
             done[path] = "link" if link else "copy"
         results.append({"agent": agent, "path": str(path), "how": done[path]})
@@ -102,13 +106,16 @@ def install(agents, link):
 
 
 def uninstall(agents):
+    for agent in _unique(agents):  # every target first, as install does
+        path = target(agent)
+        if path.exists() or path.is_symlink():
+            _check(path)
     removed, results = {}, []
     for agent in _unique(agents):
         path = target(agent)
         if path not in removed:
             if not (path.exists() or path.is_symlink()):
                 continue
-            _check(path)
             removed[path] = "link" if path.is_symlink() else "copy"
             _remove(path)
             sharing = sorted(name for name in AGENTS if target(name) == path and name not in agents)
@@ -145,7 +152,7 @@ examples:
 
 folders: {agents}
 a copy is marked with {MARKER}; clt update refreshes the copies, links follow their source
-""", formatter_class=argparse.RawDescriptionHelpFormatter)
+""", formatter_class=output.HelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     p = sub.add_parser("install", help="copy (or link) the skill into the agents' skills folder")
     p.add_argument("--agent", action="append", choices=list(AGENTS), help="claude, codex or gemini (repeatable)")
@@ -172,7 +179,7 @@ def main(argv, ctx=None, prog="clt skill"):
     if ctx.json_mode:
         print(json.dumps({"action": args.command, "targets": results}))
     elif not results:
-        info("Nothing to do.")
+        info("No copies of the skill to refresh." if args.command == "refresh" else "Nothing to do.")
     for item in [] if ctx.json_mode else results:
         info(output.err.green("✓ ") + f"{item['agent']}: {item['path']} ({item['how']})")
     return 0

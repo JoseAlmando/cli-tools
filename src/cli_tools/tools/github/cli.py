@@ -165,7 +165,7 @@ for scripts and AI agents (any position on the command line):
                     130 interrupted
 """ + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the GitHub API.", epilog=epilog,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+                                     formatter_class=output.HelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     p = sub.add_parser("login", aliases=context.command_aliases("login"),

@@ -134,7 +134,7 @@ def main(argv, ctx=None, prog="clt update"):
     ctx = ctx or context.CLIContext.from_env()
     parser = argparse.ArgumentParser(prog=prog, description="Install the latest release of clt, or a given one.",
                                      epilog=f"examples:\n  {prog} --check\n  {prog}\n  {prog} 0.2.0      # also older ones",
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+                                     formatter_class=output.HelpFormatter)
     parser.add_argument("version", nargs="?", metavar="VERSION", help="e.g. 0.2.0 or v0.2.0 (default: the latest)")
     parser.add_argument("--check", action="store_true",
                         help="only show the installed and the latest version, and what the newer ones bring")
@@ -202,10 +202,25 @@ def main(argv, ctx=None, prog="clt update"):
     return code
 
 
+def updated_clt():
+    """The clt that was just reinstalled: the one running now, at the same path, rather than the first on the PATH."""
+    running = Path(sys.argv[0])
+    for candidate in (running, running.with_suffix(".exe")):
+        if candidate.stem.lower() == "clt" and candidate.is_file():
+            return str(candidate)
+    return shutil.which("clt")
+
+
 def refresh_skill():
-    new = shutil.which("clt")
+    new = updated_clt()
     if not new:
         info(f"Run {output.err.bold('clt skill refresh')} to update the copies of the skill.")
         return
-    if subprocess.run([new, "skill", "refresh"], stdout=sys.stderr).returncode != 0:
+    # Text, not a JSON line on this command's stderr; and a release without clt skill prints no usage text here
+    env = {name: value for name, value in os.environ.items() if name != "CLT_JSON"}
+    done = subprocess.run([new, "skill", "refresh"], capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", env=env)
+    if done.returncode != 0:
         info(f"The skill copies were not refreshed; run {output.err.bold('clt skill refresh')}.")
+        return
+    sys.stderr.write((done.stdout or "") + (done.stderr or ""))
