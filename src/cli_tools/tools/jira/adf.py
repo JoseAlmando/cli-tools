@@ -1,3 +1,5 @@
+import datetime
+
 LISTS = ("bulletList", "orderedList")
 MARKS = (("code", "`"), ("em", "*"), ("strong", "**"), ("strike", "~~"))
 INLINE = ("text", "hardBreak", "mention", "emoji", "inlineCard", "date", "status", "placeholder")
@@ -32,7 +34,10 @@ def _inline_node(node):
     if kind == "hardBreak":
         return "\n"
     if kind == "mention":
-        return "@" + str(_attr(node, "text") or "").lstrip("@")
+        who = str(_attr(node, "text") or _attr(node, "id") or "").lstrip("@")
+        return "@" + who if who else ""
+    if kind == "date":
+        return _date(_attr(node, "timestamp"))
     if kind == "emoji":
         return str(_attr(node, "text") or _attr(node, "shortName") or "")
     if kind == "inlineCard":
@@ -68,6 +73,22 @@ def _table(rows):
     return "\n".join(lines)
 
 
+def _level(value):
+    """A heading level, 1 to 6, whatever the node says."""
+    try:
+        return min(max(int(value), 1), 6)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _date(timestamp):
+    """A date node's timestamp (milliseconds, as text) as YYYY-MM-DD, in UTC as Jira shows it."""
+    try:
+        return datetime.datetime.fromtimestamp(int(timestamp) / 1000, datetime.timezone.utc).date().isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return str(timestamp or "")
+
+
 def _start(node):
     order = _attr(node, "order")
     if isinstance(order, str) and order.isdigit():
@@ -87,7 +108,10 @@ def _block(node):
     if kind == "paragraph":
         return _inline(children)
     if kind == "heading":
-        return "#" * int(_attr(node, "level") or 1) + " " + _inline(children)
+        return "#" * _level(_attr(node, "level")) + " " + _inline(children)
+    if kind in ("expand", "nestedExpand"):
+        title = _attr(node, "title")
+        return "\n\n".join(text for text in (f"**{title}**" if title else "", _blocks(children)) if text)
     if kind in LISTS:
         return _list(node, 0)
     if kind == "codeBlock":
