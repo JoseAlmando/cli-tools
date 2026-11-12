@@ -48,6 +48,46 @@ class JenkinsTests(TempConf):
             ("GET", url): (200, json.dumps(data), {}),
         })[:3], (0, "id\tname\twhy\turl\n5\tCompile\tWaiting\tjob/Compile/\n", ""))
 
+    def test_empty_lists_print_the_table_header(self):
+        jobs = f"{JENKINS}/api/json?tree=jobs%5Bname%2Curl%2Ccolor%5D"
+        queue = f"{JENKINS}/queue/api/json?tree=items%5Bid%2Cwhy%2Ctask%5Bname%2Curl%5D%5D"
+        for command, url, body, header in (("jobs", jobs, '{"jobs": []}', "name\turl\tcolor\n"),
+                                           ("queue", queue, '{"items": []}', "id\tname\twhy\turl\n")):
+            with self.subTest(command=command):
+                self.assertEqual(self.run_jenkins("--read-only", command, "--table", routes={
+                    ("GET", url): (200, body, {}),
+                })[:3], (0, header, "No items.\n"))
+
+    def test_login_reports_a_rejected_token_without_saving_or_showing_it(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                code, out, err, _ = self.run_jenkins("login", "--user", "reader", "--token-stdin",
+                                                     stdin="example-token\n",
+                                                     routes={("GET", JENKINS + WHO): (status, "denied", {})})
+                self.assertEqual((code, self.saved.exists()), (1, False))
+                self.assertIn("rejected", err)
+                self.assertNotIn("example-token", out + err)
+
+    def test_incomplete_saved_session_asks_to_log_in_again(self):
+        self.saved.parent.mkdir(parents=True)
+        self.saved.write_text(json.dumps({"url": JENKINS, "user": "reader"}), encoding="utf-8")
+        code, _, err, requests = self.run_jenkins("--read-only", "me")
+        self.assertEqual((code, requests), (1, []))
+        self.assertIn("login again", err)
+
+    def test_environment_credentials_must_come_together(self):
+        with mock.patch.dict(os.environ, JENKINS_USER="reader"):
+            code, _, err, requests = self.run_jenkins("--read-only", "me")
+        self.assertEqual((code, requests), (1, []))
+        self.assertIn("together", err)
+
+    def test_bad_job_names_and_build_selectors_send_nothing(self):
+        for argv, expected in ((("build", "Folder//Job"), 1), (("log", "../Job"), 1), (("jobs", "Folder/"), 1),
+                               (("build", "Job", "latest"), 2), (("log", "Job", "1.5"), 2)):
+            with self.subTest(argv=argv):
+                code, out, _, requests = self.run_jenkins("--read-only", *argv)
+                self.assertEqual((code, out, requests), (expected, "", []))
+
     def test_http_requires_opt_in_and_uses_basic_auth_only_for_configured_server(self):
         url = "http://jenkins.example.com:8080"
         with mock.patch.dict(os.environ, JENKINS_URL=url, JENKINS_USER="reader", JENKINS_TOKEN="example-token"):
@@ -86,7 +126,8 @@ class JenkinsTests(TempConf):
 
     def test_read_only_blocks_api_writes_and_login_without_accessing_the_server(self):
         del os.environ["JENKINS_URL"]
-        for args in (("POST", "job/Compile/build"), ("login", "--user", "reader"), ("logout",)):
+        for args in (("POST", "job/Compile/build"), ("login", "--user", "reader"), ("logout",),
+                     ("lg", "--user", "reader"), ("lo",)):
             with self.subTest(args=args):
                 code, out, _, requests = self.run_jenkins("--read-only", *args)
                 self.assertEqual((code, out, requests), (4, "", []))

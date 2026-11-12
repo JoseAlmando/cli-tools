@@ -26,6 +26,7 @@ GITEA = "https://gitea.example.com"
 GITHUB = "https://api.github.com"
 JIRA = "https://example.atlassian.net"
 AZDO = "https://dev.azure.com/example"
+JENKINS = "https://jenkins.example.com"
 
 CLT_HELP = """\
 usage: clt TOOL [arguments]
@@ -433,6 +434,17 @@ class SessionTests(TempConf):
                     self.assertEqual(code, 0)
                     self.assertEqual(json.loads(out)["credentials_file"],
                                      str(home / ".config" / tool / "credentials.json"))
+
+    def test_jenkins_me_and_its_default_credentials_folder(self):
+        home = Path(self.tmp.name) / "home"
+        who = {("GET", f"{JENKINS}/whoAmI/api/json"): (200, '{"name": "reader", "authenticated": true}', {})}
+        with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
+            os.environ.pop("JENKINS_CONF_DIR")
+            write_json(home / ".config" / "jenkins" / "credentials.json",
+                       {"url": JENKINS, "user": "reader", "token": "t"})
+            code, out, _, sent = run_inline("clt", "jenkins", "--json", "me", routes=who)
+        self.assertEqual((code, json.loads(out)), (0, {"username": "reader", "authenticated": True, "url": JENKINS}))
+        self.assertTrue(sent[0].get_header("Authorization").startswith("Basic "))  # the saved session was used
 
     def test_a_token_from_the_environment_has_no_credentials_file(self):
         user = (200, json.dumps({"id": 1, "login": "bot"}), {})
