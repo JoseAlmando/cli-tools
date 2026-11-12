@@ -46,14 +46,17 @@ that file ends with `Installed …` before running `clt` again: running it meanw
 (or `pipx uninstall cli-tools`).
 
 Tab completion for tools, commands, options and their choices (`clt gi<Tab>` → `gitea github`, `clt release --bump
-<Tab>` → `fix feat major`). It is read from clt's own parsers each time, so it follows every update:
+<Tab>` → `fix feat major`). It is read from clt's own parsers each time, so it follows every update. Install it once
+for your shell, then open a new terminal:
 
 ```bash
-eval "$(clt completion bash)"                                # bash: add the line to ~/.bashrc
-eval "$(clt completion zsh)"                                 # zsh: in ~/.zshrc, after compinit
-clt completion fish > ~/.config/fish/completions/clt.fish    # fish
-clt completion powershell | Out-String | Invoke-Expression   # PowerShell: add the line to $PROFILE
+clt completion bash --install         # a line in ~/.bashrc
+clt completion zsh --install          # a line in ~/.zshrc (or $ZDOTDIR/.zshrc), with compinit if it has none
+clt completion fish --install         # ~/.config/fish/completions/clt.fish
+clt completion powershell --install   # a line in $PROFILE of each PowerShell found (PowerShell 7, Windows PowerShell)
 ```
+
+Running it again changes nothing. `clt completion <shell>` alone prints the script, to load it in one session only.
 
 For development, from a clone (changes take effect right away; `clt update` then only reminds you to `git pull`):
 

@@ -1,6 +1,7 @@
 import contextlib
 import importlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -11,6 +12,9 @@ from pathlib import Path
 from unittest import mock
 
 from cli_tools.commands import completion
+from cli_tools.core import context, errors
+from cli_tools.core.errors import ToolError
+from tests.helpers import TempConf
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -85,6 +89,93 @@ class CandidateTests(unittest.TestCase):
                 self.assertIn(marker, out.getvalue())
 
 
+class LineEndingTests(unittest.TestCase):
+    def run_clt(self, *argv, env=None):
+        return subprocess.run([sys.executable, "-m", "cli_tools", *argv], capture_output=True, timeout=60,
+                              env={**os.environ, "PYTHONPATH": str(ROOT / "src"), **(env or {})}).stdout
+
+    def test_scripts_and_candidates_have_unix_line_endings_everywhere(self):
+        # eval "$(clt completion bash)" in Git Bash fails on a \r, and every candidate would end with one
+        for shell in ("bash", "zsh", "fish"):
+            with self.subTest(shell=shell):
+                out = self.run_clt("completion", shell)
+                self.assertIn(b"\n", out)
+                self.assertNotIn(b"\r", out)
+        out = self.run_clt("completion", env={completion.WORDS_VAR: "release\x1f--bump\x1f\x1f"})
+        self.assertEqual(out, b"feat\nfix\nmajor\n")
+
+
+class InstallTests(TempConf):
+    def setUp(self):
+        super().setUp()
+        self.home = Path(self.tmp.name) / "home"
+        self.home.mkdir()
+        environ = {"HOME": str(self.home), "USERPROFILE": str(self.home)}
+        patcher = mock.patch.dict(os.environ, environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for name in ("ZDOTDIR", "XDG_CONFIG_HOME"):
+            os.environ.pop(name, None)
+
+    def install(self, shell, ctx=None):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = completion.main([shell, "--install"], ctx=ctx or context.CLIContext())
+        return code, out.getvalue(), err.getvalue()
+
+    def test_bash_adds_one_line_to_bashrc_once(self):
+        rc = self.home / ".bashrc"
+        write(rc, "alias ll='ls -l'\n")
+        self.assertEqual(self.install("bash")[0], 0)
+        _, _, err = self.install("bash")
+        self.assertEqual(rc.read_text(encoding="utf-8").count('eval "$(clt completion bash)"'), 1)
+        self.assertTrue(rc.read_text(encoding="utf-8").startswith("alias ll='ls -l'\n"))
+        self.assertIn("Already in", err)
+
+    def test_zsh_loads_compinit_first_when_the_file_does_not(self):
+        rc = self.home / ".zshrc"
+        self.install("zsh")
+        text = rc.read_text(encoding="utf-8")
+        self.assertLess(text.index("compinit"), text.index('eval "$(clt completion zsh)"'))
+        write(rc, "source $ZSH/oh-my-zsh.sh  # runs compinit\nautoload -Uz compinit\n")
+        self.install("zsh")
+        self.assertEqual(rc.read_text(encoding="utf-8").count("compinit"), 2)  # none added
+
+    def test_zsh_follows_zdotdir(self):
+        with mock.patch.dict(os.environ, ZDOTDIR=str(self.home / "zsh")):
+            self.install("zsh")
+        self.assertTrue((self.home / "zsh" / ".zshrc").is_file())
+
+    def test_fish_writes_its_completions_file(self):
+        self.install("fish")
+        path = self.home / ".config" / "fish" / "completions" / "clt.fish"
+        self.assertEqual(path.read_text(encoding="utf-8"), completion.FISH)
+
+    def test_powershell_adds_the_line_to_each_profile_and_keeps_its_line_endings(self):
+        one, two = self.home / "PowerShell" / "profile.ps1", self.home / "WindowsPowerShell" / "profile.ps1"
+        two.parent.mkdir()
+        write(two, "Set-PSReadLineOption -EditMode Emacs\r\n")
+        with mock.patch.object(completion, "powershell_profiles", lambda: [one, two]):
+            code, out, _ = self.install("powershell", ctx=context.CLIContext(json_mode=True))
+        line = "clt completion powershell | Out-String | Invoke-Expression"
+        self.assertEqual(code, 0)
+        self.assertIn(line, one.read_text(encoding="utf-8"))
+        self.assertTrue(two.read_bytes().endswith((line + "\r\n").encode()))
+        self.assertNotIn(b"\n", two.read_bytes().replace(b"\r\n", b""))
+        self.assertEqual(json.loads(out), {"shell": "powershell", "files": [
+            {"path": str(one), "action": "added"}, {"path": str(two), "action": "added"}]})
+
+    def test_without_powershell_it_says_where_to_add_the_line(self):
+        with mock.patch.object(completion, "powershell_profiles", lambda: []), \
+                self.assertRaisesRegex(ToolError, r"\$PROFILE"):
+            self.install("powershell")
+
+    def test_read_only_installs_nothing(self):
+        with self.assertRaises(errors.ReadOnlyError):
+            self.install("bash", ctx=context.CLIContext(read_only=True))
+        self.assertFalse((self.home / ".bashrc").exists())
+
+
 class ShellTests(unittest.TestCase):
     """The real scripts in the real shells, with a stand-in clt on the PATH that runs this checkout."""
 
@@ -141,8 +232,7 @@ class ShellTests(unittest.TestCase):
         self.assertEqual([line.split("\t")[0] for line in done.stdout.split("\n") if line], ["feat", "fix"],
                          done.stderr)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is not installed")
-    def test_powershell(self):
+    def complete_in_powershell(self, program):
         if os.name == "nt":
             write(self.bin / "clt.cmd", f'@"{sys.executable}" -m cli_tools %*\r\n')
         else:
@@ -151,9 +241,17 @@ class ShellTests(unittest.TestCase):
         script.write_text(self.script("powershell") + "\n$line = 'clt release --bump f'\n"
                           "(TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches |"
                           " ForEach-Object { $_.CompletionText }\n", encoding="utf-8")
-        done = subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-File", str(script)], capture_output=True,
-                              text=True, env=self.env, timeout=120)
+        done = subprocess.run([program, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                               str(script)], capture_output=True, text=True, env=self.env, timeout=120)
         self.assertEqual(done.stdout.split(), ["feat", "fix"], done.stderr)
+
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is not installed")
+    def test_powershell(self):
+        self.complete_in_powershell("pwsh")
+
+    @unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "Windows PowerShell is Windows only")
+    def test_windows_powershell(self):
+        self.complete_in_powershell("powershell")
 
 
 if __name__ == "__main__":
