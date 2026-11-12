@@ -36,6 +36,7 @@ tools:
   github, gh   client for the GitHub API, with a browser login or a token
   jira, j      client for the Jira Cloud API, with an API token
   azdo, ad     client for the Azure DevOps Services API, with a personal access token
+  jenkins      client for the Jenkins API, including jobs, builds, queue and console logs
   release      bump the version, update the changelog, tag and publish a release
   update       install the latest release of clt, or a given version
   skill        install clt's skill for Claude Code, Codex or Gemini CLI
@@ -159,7 +160,7 @@ class HelpAndVersionTests(TempConf):
     def test_each_command_names_itself_in_its_usage(self):
         cases = [("clt", ["taiga"], "usage: clt taiga "), ("clt", ["gitea"], "usage: clt gitea "),
                  ("clt", ["github"], "usage: clt github "), ("clt", ["jira"], "usage: clt jira "),
-                 ("clt", ["azdo"], "usage: clt azdo "),
+                 ("clt", ["azdo"], "usage: clt azdo "), ("clt", ["jenkins"], "usage: clt jenkins "),
                  ("clt", ["release"], "usage: clt release "),
                  ("clt", ["update"], "usage: clt update "), ("clt", ["t"], "usage: clt taiga "),
                  ("clt", ["gt"], "usage: clt gitea "), ("clt", ["gh"], "usage: clt github "),
@@ -176,7 +177,8 @@ class HelpAndVersionTests(TempConf):
                                        ("clt", ["gitea"], "login refresh logout me token mine api"),
                                        ("clt", ["github"], "login refresh logout me token protect mine api"),
                                        ("clt", ["jira"], "login logout me token issue mine mcp api"),
-                                       ("clt", ["azdo"], "login logout me token mcp wiql mine api")):
+                                       ("clt", ["azdo"], "login logout me token mcp wiql mine api"),
+                                       ("clt", ["jenkins"], "login logout me jobs queue build log api")):
             with self.subTest(script=script):
                 out = run_process(script, *argv, "--help")[1]
                 for command in commands.split():
