@@ -8,7 +8,7 @@ clt release --json --bump <fix|feat|major> --yes --no-push    # tests, version, 
 clt release --json --publish                                  # only after the user agrees: push and publish
 ```
 
-If `--publish` fails halfway, running it again finishes the job; it skips what is already done.
+If `--publish` fails halfway, running it again finishes the job; it skips what is already done. `clt release --json --publish --dry-run` is a read: it prints what is still missing (`push`: the branch and the tag; `create_release`) and changes nothing.
 
 The release commit and the annotated tag's message are `chore(release): X.Y.Z` (older releases used `Release X.Y.Z`; both are left out of the next changelog). With Conventional Commits prefixes, the changelog groups the commits under *Breaking changes*, *Features*, *Fixes* and *Other*.
 

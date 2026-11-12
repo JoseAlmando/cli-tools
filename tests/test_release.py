@@ -424,6 +424,24 @@ class PublishTests(ReleaseRepo):
         with self.assertRaisesRegex(ToolError, "v0.2.0.*clt release --publish"):
             self.release("--yes", "--no-push", "--skip-tests")
 
+    def test_publish_dry_run_says_what_is_missing_and_changes_nothing(self):
+        self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
+        calls = self.talks()
+        for env in ({}, {"CLT_READONLY": "1"}):  # a dry run only reads, so read-only mode allows it
+            with self.subTest(env=env):
+                code, out, _ = self.release("--publish", "--dry-run", env=env)
+                self.assertEqual((code, json.loads(out)), (0, {"tag": "v0.2.0", "host": "github.com", "repo": "o/r",
+                                                               "push": ["main", "v0.2.0"], "create_release": True}))
+        self.assertEqual(calls, ["ls-remote", "ls-remote"])
+        self.assertFalse(gitrepo.remote_tag_exists(self.root, "v0.2.0"))
+        self.assertEqual(self.publisher.created, [])
+
+    def test_publish_dry_run_with_everything_published_has_nothing_to_do(self):
+        self.release("--skip-tests", stdin="2\ny\n", tty=True)
+        code, out, _ = self.release("--publish", "--dry-run")
+        self.assertEqual((json.loads(out)["push"], json.loads(out)["create_release"]), ([], False))
+        self.assertEqual(len(self.publisher.created), 1)
+
     def test_publish_is_blocked_in_read_only_mode(self):
         self.release("--bump", "feat", "--yes", "--no-push", "--skip-tests")
         with self.assertRaises(errors.ReadOnlyError):

@@ -109,6 +109,7 @@ clt release            # checks, runs the tests, asks fix / feat / new version (
                        # and asks before pushing and publishing the release
 clt release --dry-run  # shows what it would do
 clt release --publish  # finishes a release that was tagged but not pushed or published (safe to repeat)
+clt release --publish --dry-run   # shows what is still missing on origin and on the host, and changes nothing
 ```
 
 It stops before changing anything if the tree has changes, the branch is not the main one or is behind `origin`, the tag already exists, or the tests fail. The suggestion is `feat` when a commit since the last tag starts with `feat:`, a new major version for `BREAKING CHANGE` or `type!:`, and `fix` otherwise. When commits use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) prefixes, the changelog section (also the release's text on GitHub or Gitea) groups them under *Breaking changes*, *Features*, *Fixes* and *Other*; without any, it is a plain list.
