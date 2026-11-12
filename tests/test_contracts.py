@@ -477,6 +477,18 @@ class SessionTests(TempConf):
                                                        "token_source": "credentials_file"}))
         self.assertTrue(sent[0].get_header("Authorization").startswith("Basic "))  # the saved session was used
 
+    def test_jira_issue_json_shape(self):
+        fields = "summary,status,issuetype,priority,assignee,reporter,labels,parent,description,subtasks,issuelinks,comment"
+        issue = {"key": "A-1", "fields": {"summary": "Fix", "comment": {"comments": [], "total": 0}}}
+        env = {"JIRA_URL": JIRA, "JIRA_EMAIL": "e@example.com", "JIRA_TOKEN": "t"}
+        with mock.patch.dict(os.environ, env):
+            code, out, _, _ = run_inline("clt", "jira", "--json", "--read-only", "issue", "A-1", routes={
+                ("GET", f"{JIRA}/rest/api/3/issue/A-1?fields={fields}"): (200, json.dumps(issue), {})})
+        self.assertEqual(code, 0)
+        self.assertEqual(set(json.loads(out)), {"key", "summary", "type", "status", "priority", "assignee", "reporter",
+                                                "labels", "parent", "description", "subtasks", "links", "comments",
+                                                "url"})
+
     def test_me_names_the_variable_a_token_came_from(self):
         cases = [
             ("taiga", {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "t"}, f"{TAIGA}/api/v1/users/me", "TAIGA_TOKEN"),

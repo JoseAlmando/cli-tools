@@ -381,6 +381,16 @@ class AdfTests(unittest.TestCase):
         self.assertEqual(adf.to_text(node),
                          "https://example.com/a\n\nhttps://example.com/b\n\n[image: shot.png]\n\n[attachment]")
 
+    def test_expand_date_and_mentions_keep_what_they_say(self):
+        expand = {"type": "expand", "attrs": {"title": "Details"}, "content": [para(text("Hidden"))]}
+        self.assertEqual(adf.to_text(doc(expand)), "**Details**\n\nHidden")
+        date = {"type": "date", "attrs": {"timestamp": "1767225600000"}}  # 2026-01-01T00:00:00Z
+        self.assertEqual(adf.to_text(doc(para(text("Due "), date))), "Due 2026-01-01")
+        for attrs, expected in (({"id": "acc-1", "text": "@Ana"}, "@Ana"), ({"id": "acc-1"}, "@acc-1"), ({}, "")):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(adf.to_text(doc(para(text("Ask "), {"type": "mention", "attrs": attrs}))).strip(),
+                                 ("Ask " + expected).strip())
+
     def test_unknown_nodes_keep_their_text(self):
         node = doc({"type": "panel", "attrs": {"panelType": "info"}, "content": [para(text("Note"))]},
                    para({"type": "status", "attrs": {"text": "DONE"}}))
@@ -474,6 +484,32 @@ class IssueTests(TempConf):
             cli.main(["issue", "A-1"], ctx=context.CLIContext())
         for expected in ("A-1", "Fix login", "In Progress", "It fails", "comment 1", "A-9"):
             self.assertIn(expected, out.getvalue())
+
+
+class MalformedAnswerTests(TempConf):
+    """What a proxy, an old server or odd content can send: a clear error or a readable result, never a traceback."""
+
+    def setUp(self):
+        super().setUp()
+        save_site_session()
+
+    def test_a_me_that_is_not_json_is_a_clear_error(self):
+        with self.assertRaisesRegex(ToolError, "Getting the user"):
+            run(["me"], {("GET", SITE_API + "myself"): (200, "<html>Sign in</html>")}, env={"JIRA_URL": SITE})
+
+    def test_odd_issue_content_still_reads(self):
+        issue = json.loads(json.dumps(FULL_ISSUE))
+        issue["fields"]["summary"] = None
+        issue["fields"]["description"] = doc({"type": "heading", "attrs": {"level": "x"}, "content": [text("T")]},
+                                             {"type": "heading", "attrs": {"level": 9}, "content": [text("U")]})
+        issue["fields"]["comment"] = {"comments": [comment(n) for n in range(1, 3)], "total": 5}
+        more = SITE_API + "issue/A-1/comment?startAt=0&maxResults=10"
+        routes = {("GET", ISSUE_URL): (200, issue), ("GET", more): (200, [comment(4)])}  # a list, not an object
+        code, out, err, _ = run(["issue", "A-1"], routes, env={"JIRA_URL": SITE})
+        self.assertEqual(code, None)
+        self.assertNotIn("None", out.splitlines()[0])
+        self.assertIn("# T", out)
+        self.assertIn("###### U", out)
 
 
 if __name__ == "__main__":

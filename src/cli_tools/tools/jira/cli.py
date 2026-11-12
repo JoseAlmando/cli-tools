@@ -54,7 +54,7 @@ def cmd_token(jira, args):
 def cmd_me(jira, args):
     creds = jira.load_credentials()
     _, raw, _ = jira.call("GET", "myself", None)
-    me = json.loads(raw) if raw else {}
+    me = http.parse_json(raw, "Getting the user") if raw else {}
     if not isinstance(me, dict):
         raise ToolError("Unexpected response from myself")
     credentials_file = None if creds.get("env") else str(jira.credentials_file)
@@ -101,7 +101,9 @@ def _comments(jira, key, field, wanted):
     total = field.get("total") if isinstance(field.get("total"), int) else len(found)
     if total > len(found):
         _, raw, _ = jira.call("GET", f"issue/{key}/comment?startAt={max(total - wanted, 0)}&maxResults={wanted}", None)
-        found = http.parse_json(raw, "Getting the comments").get("comments") or []
+        data = http.parse_json(raw, "Getting the comments")
+        found = data.get("comments") if isinstance(data, dict) else data  # some servers send the bare list
+        found = found if isinstance(found, list) else []
     return [_comment(c) for c in found[-wanted:] if isinstance(c, dict)]
 
 
@@ -127,7 +129,7 @@ def issue_summary(jira, key, wanted):
 
 def print_issue(summary):
     out = output.out
-    print(f"{out.bold(summary['key'])}  {summary['summary']}")
+    print(f"{out.bold(summary['key'])}  {summary['summary'] or ''}".rstrip())
     print(" · ".join(str(v) for v in (summary["type"], summary["status"], summary["priority"]) if v))
     for label, value in (("Assignee", summary["assignee"]), ("Reporter", summary["reporter"]),
                          ("Parent", summary["parent"]), ("Labels", ", ".join(summary["labels"]))):
