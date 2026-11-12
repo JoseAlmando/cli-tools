@@ -29,10 +29,10 @@ def parse_remote(url):
     found = (re.fullmatch(r"https://([^/@]+@)?([^/:]+)(:\d+)?/([^/]+)/([^/]+?)(\.git)?/?", url)
              or re.fullmatch(r"ssh://([^/@]+@)?([^/:]+)(:\d+)?/([^/]+)/([^/]+?)(\.git)?/?", url))
     if found:
-        return found.group(2), found.group(4), found.group(5)
+        return found.group(2).lower(), found.group(4), found.group(5)  # host names have no case
     found = re.fullmatch(r"[^/@]+@([^/:]+):([^/]+)/([^/]+?)(\.git)?/?", url)
     if found:
-        return found.group(1), found.group(2), found.group(3)
+        return found.group(1).lower(), found.group(2), found.group(3)
     shown = re.sub(r"//[^/@]*@", "//", url)  # never echo credentials embedded in the URL
     raise ToolError(f"Cannot tell the host, owner and repo from the remote URL {shown!r}")
 
@@ -54,7 +54,7 @@ def last_tag(root):
 
 def messages_since(root, tag):
     """Full commit messages after tag (or all of HEAD), oldest first, without earlier release commits."""
-    raw = git(root, "log", "--reverse", "--format=%B%x00", f"{tag}..HEAD" if tag else "HEAD")
+    raw = git(root, "log", "--reverse", "--no-merges", "--format=%B%x00", f"{tag}..HEAD" if tag else "HEAD")
     messages = [m.strip() for m in raw.split("\x00") if m.strip()]
     return [m for m in messages if not RELEASE_COMMIT.match(m.splitlines()[0])]
 

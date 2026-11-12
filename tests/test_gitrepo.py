@@ -21,6 +21,11 @@ class ParseRemoteTests(unittest.TestCase):
         self.assertNotIn("s3cret-token", str(caught.exception))
         self.assertIn("host.example", str(caught.exception))
 
+    def test_the_host_is_compared_without_case(self):
+        for url in ("https://GitHub.com/o/r.git", "ssh://git@GITHUB.COM/o/r", "git@GitHub.com:o/r.git"):
+            with self.subTest(url=url):
+                self.assertEqual(gitrepo.parse_remote(url), ("github.com", "o", "r"))
+
     def test_rejects_anything_else(self):
         for url in ("/srv/git/r.git", "https://github.com/only-owner", "file:///tmp/x"):
             with self.subTest(url=url), self.assertRaises(ToolError):
@@ -42,6 +47,14 @@ class GitHelpersTests(GitRepo):
         self.assertEqual(gitrepo.subjects_since(self.root, "v0.1.0"), ["feat: add x", "Fix y"])
         self.assertEqual(gitrepo.messages_since(self.root, "v0.1.0"), ["feat: add x", "Fix y\n\nBREAKING CHANGE: z"])
         self.assertEqual(gitrepo.subjects_since(self.root, None), ["Initial commit", "feat: add x", "Fix y"])
+
+    def test_merge_commits_are_not_part_of_the_changes(self):
+        self.git("tag", "-a", "v0.1.0", "-m", "v0.1.0")
+        self.git("checkout", "--quiet", "-b", "side")
+        self.commit("feat: on a branch")
+        self.git("checkout", "--quiet", "main")
+        self.git("merge", "--quiet", "--no-ff", "-m", "Merge pull request #1 from o/side", "side")
+        self.assertEqual(gitrepo.messages_since(self.root, "v0.1.0"), ["feat: on a branch"])
 
     def test_remote_tag_exists(self):
         self.git("tag", "v1.0.0")
