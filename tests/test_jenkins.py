@@ -41,6 +41,17 @@ class JenkinsTests(TempConf):
             ("GET", f"{route}/12/consoleText"): (200, "line one\nline two\n", {}),
         })[:3], (0, "line one\nline two\n", ""))
 
+    def test_log_tail_prints_only_the_last_lines(self):
+        route = ("GET", f"{JENKINS}/job/Compile/7/consoleText")
+        console = "one\ntwo\nthree\nfour\n"
+        for argv, expected in ((("--tail", "2"), "three\nfour\n"), (("--tail", "9"), console), ((), console),
+                               (("--tail", "0"), "")):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.run_jenkins("--read-only", "log", "Compile", "7", *argv,
+                                                  routes={route: (200, console, {})})[:3], (0, expected, ""))
+        code, _, _, requests = self.run_jenkins("--read-only", "log", "Compile", "--tail", "-1")
+        self.assertEqual((code, requests), (2, []))
+
     def test_queue_can_be_read_as_a_table(self):
         url = f"{JENKINS}/queue/api/json?tree=items%5Bid%2Cwhy%2Ctask%5Bname%2Curl%5D%5D"
         data = {"items": [{"id": 5, "why": "Waiting", "task": {"name": "Compile", "url": "job/Compile/"}}]}

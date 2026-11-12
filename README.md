@@ -92,7 +92,7 @@ clt azdo GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --al
 clt jenkins login --url https://jenkins.example.com --user <username>
 clt jenkins --json --read-only jobs "Folder/Subfolder"
 clt jenkins --json --read-only build "Folder/Job" lastSuccessfulBuild
-clt jenkins --json --read-only log "Folder/Job" 42
+clt jenkins --json --read-only log "Folder/Job" 42 --tail 200
 clt jenkins --json --read-only queue --table
 clt jenkins --json --read-only GET "api/json?tree=jobs[name,color]"
 ```
