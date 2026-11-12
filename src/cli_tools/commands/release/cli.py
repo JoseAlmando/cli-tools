@@ -221,8 +221,8 @@ def plan_release(root, args):
             "suggested": versions.suggest_bump(messages)}
 
 
-def publish(root, plan, tag, body):
-    """Pushes what origin lacks, in one atomic push, and creates the release if it is missing; safe to run again."""
+def missing_on_origin(root, plan, tag):
+    """(refspecs, names) of what origin lacks for this release: the branch up to the tag, and the tag."""
     branch = plan["branch"]
     tagged = gitrepo.git(root, "rev-parse", f"{tag}^{{commit}}")
     refspecs, names = [], []
@@ -233,6 +233,12 @@ def publish(root, plan, tag, body):
     if tag not in plan["remote_tags"]:
         refspecs.append(f"refs/tags/{tag}")
         names.append(tag)
+    return refspecs, names
+
+
+def publish(root, plan, tag, body):
+    """Pushes what origin lacks, in one atomic push, and creates the release if it is missing; safe to run again."""
+    refspecs, names = missing_on_origin(root, plan, tag)
     if refspecs:
         info(f"Pushing {' and '.join(names)} to origin…")
         gitrepo.push(root, *refspecs)
@@ -352,7 +358,8 @@ def make_release(args):
 
 def resume_publish(args):
     """--publish: push and publish the newest release tagged here, skipping whatever is already done."""
-    args.ctx.require_writes("release --publish")
+    if not args.dry_run:
+        args.ctx.require_writes("release --publish")
     root = find_root()
     at_head = gitrepo.git(root, "tag", "--points-at", "HEAD", "--list", "v[0-9]*").splitlines()
     tags = at_head or gitrepo.git(root, "tag", "--list", "v[0-9]*", "--sort=-v:refname").splitlines()
@@ -364,6 +371,12 @@ def resume_publish(args):
     remote_head, remote_tags = gitrepo.remote_refs(root, branch)
     plan = {"branch": branch, "owner": owner, "repo": repo, "publisher": publisher_for(host),
             "remote_head": remote_head, "remote_tags": remote_tags}
+    if args.dry_run:
+        print(json.dumps({"tag": tag, "host": host, "repo": f"{owner}/{repo}",
+                          "push": missing_on_origin(root, plan, tag)[1],
+                          "create_release": not plan["publisher"].release_url(owner, repo, tag)},
+                         ensure_ascii=False, indent=2))
+        return 0
     version = tag[1:]
     url = publish(root, plan, tag, changelog_section(root / CHANGELOG, version) or f"Release {version}")
     if args.ctx.json_mode:
@@ -391,7 +404,8 @@ with <Version>); other files with --version-file. Settings per repo in {CONFIG_F
     parser.add_argument("--yes", action="store_true", help="never ask: take the suggested bump and do not push")
     parser.add_argument("--no-push", action="store_true", help="stop after the local commit and tag")
     parser.add_argument("--publish", action="store_true", help="push and publish a release already tagged here")
-    parser.add_argument("--dry-run", action="store_true", help="print the plan and change nothing")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print the plan and change nothing; with --publish, what is missing on origin and the host")
     parser.add_argument("--skip-tests", action="store_true", help="do not run the project's tests first")
     parser.add_argument("--version-file", metavar="PATH", help="the file that holds the version")
     return parser
