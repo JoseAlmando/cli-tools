@@ -579,6 +579,12 @@ class ApiCommandTests(TempConf):
         self.assertEqual([line.split("✓ ", 1)[1] for line in err.splitlines() if "✓ " in line],
                          ["GET repos/o/r/pulls -> HTTP 200", "GET repos/o/r/pulls?page=2 -> HTTP 200"])
 
+    def test_api_help_promises_a_token_renewal_only_where_there_is_one(self):
+        for tool, renews in (("taiga", True), ("gitea", True), ("github", True), ("jira", False), ("azdo", False)):
+            with self.subTest(tool=tool):
+                out = " ".join(run_inline("clt", tool, "api", "--help")[1].split())  # argparse wraps the text
+                self.assertEqual("renews it and retries once" in out, renews)
+
     def test_each_tool_help_names_the_api_options(self):
         for tool in ("taiga", "gitea", "github", "jira", "azdo", "jenkins"):
             with self.subTest(tool=tool):
