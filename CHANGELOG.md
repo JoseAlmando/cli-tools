@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.0 - 2026-11-12
+
+### Features
+
+- feat(core): usage errors exit with 2 and are a JSON line with --json
+
+### Fixes
+
+- fix: refresh says a token from the environment is never renewed
+
+### Other
+
+- refactor(github): drop the login menu's branch for a missing OAuth app
+
 ## 0.10.1 - 2026-11-12
 
 ### Fixes
