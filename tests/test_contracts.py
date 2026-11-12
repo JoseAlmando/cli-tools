@@ -223,6 +223,15 @@ class ExitCodeTests(TempConf):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("Unknown tool 'nope'", err)
 
+    def test_session_commands_never_renew_a_token_from_the_environment(self):
+        for argv, env, var in ((["taiga", "refresh"], {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "t"}, "TAIGA_TOKEN"),
+                               (["gitea", "rfh"], {"GITEA_URL": GITEA, "GITEA_TOKEN": "t"}, "GITEA_TOKEN")):
+            with self.subTest(argv=argv), mock.patch.dict(os.environ, env):
+                code, _, err, sent = run_inline("clt", *argv, routes={})
+                self.assertEqual((code, sent), (1, []))
+                self.assertIn(f"{var} is never renewed", err)
+                self.assertNotIn("rejected", err)
+
     def test_wrong_usage(self):
         for script, argv in (("clt", ["taiga", "api", "FOO", "users/me"]), ("clt", ["taiga", "api", "FOO", "x"]),
                              ("clt", ["gitea", "nope"]), ("clt", ["release", "--bump", "huge"])):
