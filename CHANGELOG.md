@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.1 - 2026-11-12
+
+### Fixes
+
+- fix(api): refuse dot segments in every tool, and make --all stop and fail where it should
+
 ## 0.14.0 - 2026-11-12
 
 ### Features
