@@ -66,6 +66,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # zsh and fish for the completion tests (bash and PowerShell come with the runners)
+      - name: Shells for the completion tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish > /dev/null
+
       - name: Unit tests
         run: python -m unittest discover -s tests -t . -v
         env:
