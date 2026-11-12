@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.1 - 2026-11-12
+
+### Fixes
+
+- fix(update): reinstall with the installer that installed clt, and log the Windows update
+- fix(update): on Windows, start the installer only after clt has exited
+- fix(update): pass the log file on to the Windows installer
+
+### Other
+
+- ci: run a real clt update on the installed clt
+- ci: show the update log and the version the clt update step ends with
+
 ## 0.11.0 - 2026-11-12
 
 ### Features
