@@ -9,6 +9,7 @@ TOOLS = (
     ("github", "cli_tools.tools.github.cli", "client for the GitHub API, with a browser login or a token"),
     ("jira", "cli_tools.tools.jira.cli", "client for the Jira Cloud API, with an API token"),
     ("azdo", "cli_tools.tools.azdo.cli", "client for the Azure DevOps Services API, with a personal access token"),
+    ("jenkins", "cli_tools.tools.jenkins.cli", "client for the Jenkins API, including jobs, builds, queue and console logs"),
     ("release", "cli_tools.commands.release.cli", "bump the version, update the changelog, tag and publish a release"),
     ("update", "cli_tools.commands.update", "install the latest release of clt, or a given version"),
     ("skill", "cli_tools.commands.skill", "install clt's skill for Claude Code, Codex or Gemini CLI"),

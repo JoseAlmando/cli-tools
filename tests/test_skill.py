@@ -6,8 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "src" / "cli_tools" / "skill"
 REFERENCES = {"jira": "references/jira.md", "azdo": "references/azure-devops.md", "github": "references/github.md",
-              "taiga": "references/taiga.md", "gitea": "references/gitea.md"}
-COMMANDS = {"login", "me", "issue", "mine", "wiql", "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
+              "taiga": "references/taiga.md", "gitea": "references/gitea.md", "jenkins": "references/jenkins.md"}
+COMMANDS = {"login", "me", "issue", "mine", "wiql", "jobs", "build", "log", "queue",
+            "GET", "POST", "PUT", "PATCH", "DELETE", "api"}
 WRITES = ("POST", "PUT", "PATCH", "DELETE")
 FLAGS = {"--json", "--read-only"}
 
@@ -43,7 +44,7 @@ class SkillTests(unittest.TestCase):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         front = re.match(r"---\n(.*?)\n---\n", text, re.S).group(1)
         description = next(line for line in front.splitlines() if line.startswith("description:"))
-        for name in ("Jira", "Azure DevOps"):
+        for name in ("Jira", "Azure DevOps", "Jenkins"):
             self.assertIn(name, description)
         for reference in REFERENCES.values():
             self.assertIn(reference, text)

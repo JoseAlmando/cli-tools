@@ -29,8 +29,10 @@ src/cli_tools/
 │   │                    and the pre-filled token page; only as clt github)
 │   ├── jira/            client.py (site or api.atlassian.com by token kind, Basic auth, paging hooks), adf.py (rich text
 │   │                    to plain text), cli.py (login, me, issue, mine, mcp, api)
-│   └── azdo/            client.py (organization, PAT as Basic auth, api-version, JSON Patch, paging hooks), cli.py
-│                        (login, me, mcp, wiql, mine, api)
+│   ├── azdo/            client.py (organization, PAT as Basic auth, api-version, JSON Patch, paging hooks), cli.py
+│   │                    (login, me, mcp, wiql, mine, api)
+│   └── jenkins/         client.py (controller context path, optional Basic auth, opt-in HTTP), cli.py
+│                        (login, logout, me, jobs, queue, build, log, api)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
     ├── skill.py         clt skill: install, uninstall and refresh the skill in the agents' folders
@@ -55,6 +57,8 @@ Dependencies go one way:
 ### CLIContext
 
 `core.context.CLIContext` is a frozen dataclass with `json_mode` and `read_only`. It is built once per run and passed explicitly: to `main(argv, ctx=...)`, to the command functions as `args.ctx`, and to `api.run_api(args, call, ctx)`. Use `ctx.require_writes("what")` before anything that changes something, and `ctx.json_mode` to choose machine-readable output. When a function gets no context (a direct call in a test, for example) it builds one from the environment with `CLIContext.from_env()`. There is no module-level "current context".
+
+Jenkins uses controller-relative paths because each resource has its own `api/json` endpoint. Its client validates the controller URL before using the shared transport. It allows HTTP only with `JENKINS_ALLOW_HTTP=1`; the shared HTTPS URL validator used by other tools is unchanged. The Jenkins client resolves configuration lazily so an API dry run or a read-only rejection can complete without a controller or a session.
 
 ## The core modules
 

@@ -1,15 +1,16 @@
 # cli-tools
 
-Command-line tools for the Taiga, Gitea, GitHub, Jira Cloud and Azure DevOps Services APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
+Command-line tools for the Taiga, Gitea, GitHub, Jira Cloud, Azure DevOps Services and Jenkins APIs, gathered under a single command, `clt`. They only use the Python standard library, with no dependencies.
 
 | Command | What it does |
 |---|---|
-| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`, `clt jira …`, `clt azdo …`. |
+| `clt` | Groups the tools: `clt taiga …`, `clt gitea …`, `clt github …`, `clt jira …`, `clt azdo …`, `clt jenkins …`. |
 | `clt taiga` | Taiga API client: username and password login, automatic token renewal, and `GET/POST/PUT/PATCH/DELETE` calls to `/api/v1/`. |
 | `clt gitea` | Gitea API client: OAuth2 login with PKCE in the browser (including through a Gitea external login source, such as an OIDC provider), automatic token renewal, and calls to `/api/v1/`. |
 | `clt github` | GitHub API client: login in the browser or with a token, and calls to `https://api.github.com/`. |
 | `clt jira` | Jira Cloud API client: login with an Atlassian API token (classic or with scopes), calls to `/rest/api/3/`, and `clt jira issue KEY` to read a ticket as plain text. |
 | `clt azdo` | Azure DevOps Services API client: login with a personal access token, calls to `https://dev.azure.com/<org>/` with `api-version` added for you. |
+| `clt jenkins` | Jenkins Remote Access API client: anonymous or API token access, job and queue lists, build details and console logs. |
 
 ## Installation
 
@@ -83,6 +84,13 @@ clt azdo GET _apis/projects --fields id,name --table
 clt azdo mine                                   # your open work items in every project
 clt azdo wiql "SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.AssignedTo] = @Me"
 clt azdo GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --all --fields pullRequestId,title
+
+clt jenkins login --url https://jenkins.example.com --user <username>
+clt jenkins --json --read-only jobs "Folder/Subfolder"
+clt jenkins --json --read-only build "Folder/Job" lastSuccessfulBuild
+clt jenkins --json --read-only log "Folder/Job" 42
+clt jenkins --json --read-only queue --table
+clt jenkins --json --read-only GET "api/json?tree=jobs[name,color]"
 ```
 
 `clt github login` offers three ways in:
@@ -96,6 +104,16 @@ clt azdo GET '<project>/_apis/git/repositories/<repo>/pullrequests?$top=50' --al
 `clt jira login` asks for your Atlassian email and an API token (`--create-token` opens id.atlassian.com first). Both kinds of token work: a classic one talks to the site, and one with scopes (`read:jira-work`, `write:jira-work`, `read:jira-user`) goes through `api.atlassian.com` with the site's cloud id, which login finds on its own (`--cloud-id` gives it, `--scoped` skips the check). `clt jira issue KEY` prints a ticket's summary, people, links, subtasks, description and last comments, with Jira's rich text turned into plain text.
 
 `clt azdo login` asks for a personal access token (`--create-token` opens the organization's token page and lists the scopes to tick: Work Items, Code, and Project and Team). Paths are relative to `https://dev.azure.com/<org>/`; `clt` adds `api-version=7.1` when a path has none, sends JSON Patch when creating or updating a work item, and follows both kinds of paging (`x-ms-continuationtoken` and `$top`/`$skip`) with `--all`.
+
+`clt jenkins login` checks your username and API token and saves the session for that controller. Set `JENKINS_URL` to use Jenkins' anonymous permissions when you have no saved session or token. Include the controller's context path if it has one, such as `https://jenkins.example.com/ci`; a trailing `/api/` is accepted. Generic calls are relative to the controller, so use `api/json` for the root or `job/Folder/job/Job/api/json` for a nested job. `build` and `log` default to `lastBuild` when you omit the build number.
+
+For a controller that only serves HTTP, opt in for the current PowerShell session:
+
+```powershell
+$env:JENKINS_URL = 'http://jenkins.example.com:8080/api/'
+$env:JENKINS_ALLOW_HTTP = '1'
+clt jenkins --json --read-only jobs --table
+```
 
 `clt --help` and each tool's `--help` (`clt taiga --help`, …) list the commands and the environment variables.
 
@@ -135,16 +153,16 @@ Settings per repo go in an optional `.clt.json`:
 
 Every tool can run unattended:
 
-- **No prompts.** Without a terminal, `login` fails at once instead of waiting. A session can also come from `TAIGA_TOKEN`, `GITEA_TOKEN`, `JIRA_EMAIL` with `JIRA_TOKEN`, or `AZDO_TOKEN`, and `clt taiga login --user <u> --password-stdin` reads the password from stdin.
-- **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status and body when there is one, and makes `me` print a JSON object (`id`, `username`, `full_name`, `email`, `url`, `credentials_file`, and `expires_at` in Gitea).
+- **No prompts.** Without a terminal, `login` fails at once instead of waiting unless you use an option such as `--token-stdin`. See the configuration table for environment variables that let you use an existing token.
+- **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status when available, and makes `me` print a JSON object. Jenkins reports `username`, `authenticated` and `url`; `clt jenkins log` always writes plain text.
 - **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
 - **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, `--all` joins every page, and `--table` prints a list as tab-separated lines under a header (an empty list prints the header when the columns are known, and `No items.` on stderr).
-- **One command for common reads.** `clt <tool> mine` lists your open items on any service as rows of kind, id, state, title and where (a JSON list with `--json`, a table with `--table`); `clt azdo wiql "<query>"` runs a WIQL query and reads the fields it selects. Both are reads and work under `--read-only`.
+- **One command for common reads.** `clt <tool> mine` lists your open work items on the issue tracking services; `clt azdo wiql "<query>"` runs a WIQL query, and `clt jenkins jobs` lists jobs in a folder. These commands work under `--read-only`.
 
 `--json` and `--read-only` can go anywhere on the command line.
 
-clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules, opens with a table of common tasks and the exact command for each (so an agent does not search for them), and keeps the recipes in `references/` (`taiga.md`, `gitea.md`, `github.md`, `jira.md`, `azure-devops.md`, `release.md`), which an agent reads only when it works with that service. It also tells agents with persistent memory to keep the commands that worked, so the next session runs them without loading the skill. Install it where your agents read skills:
+clt carries a skill for AI agents ([`src/cli_tools/skill/SKILL.md`](src/cli_tools/skill/SKILL.md)): it explains these rules, opens with a table of common tasks and the exact command for each (so an agent does not search for them), and keeps the recipes in `references/`, which an agent reads only when it works with that service. It also tells agents with persistent memory to keep the commands that worked, so the next session runs them without loading the skill. Install it where your agents read skills:
 
 ```bash
 clt skill install                    # for every agent CLI on the PATH (claude, codex, gemini)
@@ -168,9 +186,9 @@ Atlassian's server signs you in with OAuth in the browser, and your Atlassian or
 
 ## Configuration
 
-No server is configured by default. Each tool takes it, in this order:
+For tools with a configurable server URL, clt takes it in this order:
 1. the `--url` option of `login`;
-2. the `TAIGA_URL` or `GITEA_URL` environment variable;
+2. the service's environment variable, such as `JENKINS_URL`;
 3. the server of the last session.
 
 | Variable | Purpose |
@@ -190,6 +208,10 @@ No server is configured by default. Each tool takes it, in this order:
 | `AZDO_TOKEN` | Personal access token to use instead of the saved session (`AZURE_DEVOPS_EXT_PAT`, the Azure CLI's name, works too). |
 | `AZDO_API_VERSION` | The `api-version` added to paths without one (by default `7.1`). |
 | `AZDO_CONF_DIR`, `AZDO_CACERT` | Azure DevOps credentials folder (by default `~/.config/azdo`) and optional extra CA. |
+| `JENKINS_URL` | Jenkins controller URL, including its context path if it has one. |
+| `JENKINS_USER`, `JENKINS_TOKEN` | Jenkins username and API token to use with `JENKINS_URL` instead of a saved session. |
+| `JENKINS_CONF_DIR`, `JENKINS_CACERT` | Jenkins credentials folder (by default `~/.config/jenkins`) and optional extra CA. |
+| `JENKINS_ALLOW_HTTP` | Set to `1` for a Jenkins controller that only serves HTTP. HTTP sends any credentials without TLS; prefer HTTPS. |
 | `GITEA_CLIENT_ID` | Public Gitea OAuth2 app; by default, the one Gitea has built in for `tea`. |
 | `GITEA_CALLBACK_PORT` | Local port for the browser's answer; `38291` by default. |
 | `NO_COLOR` | Turns colors off. |
@@ -212,8 +234,8 @@ uvx ruff@0.17.3 check .                                            # the linter,
 | Path | Contents |
 |---|---|
 | `src/cli_tools/cli.py`, `registry.py` | The `clt` command and the list of what it runs. A new tool is one line in `registry.py`; `clt` imports a tool only when it runs. |
-| `src/cli_tools/core/` | The shared parts, which know nothing about Taiga, Gitea, GitHub, Jira or Azure DevOps: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` and `mcp` commands and `runner.run()`. |
-| `src/cli_tools/tools/<tool>/` | One package per API client (`taiga`, `gitea`, `github`, `jira`, `azdo`): `client.py` (server, session, token renewal) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
+| `src/cli_tools/core/` | Shared parts that are independent of the services: errors and exit codes, the `--json`/`--read-only` context, output, HTTP, credential files, the `api` and `mcp` commands and `runner.run()`. |
+| `src/cli_tools/tools/<tool>/` | One package per API client: `client.py` (server, session, token renewal where supported) and `cli.py` (commands); Gitea's browser login is in `auth.py`. |
 | `src/cli_tools/commands/` | `clt release` (with its version files and git helpers), `clt update` and `clt skill`. |
 | `tests/` | Tests with `unittest`, with no network or servers. `test_contracts.py` pins the commands' public behaviour. |
 | `docs/architecture.md` | How the code is organized and how to add a tool. |
