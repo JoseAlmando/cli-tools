@@ -123,12 +123,15 @@ jobs:
           "$bin/clt" update "$TARGET"
           if [ "$RUNNER_OS" = Windows ]; then
             # Wait for uv's last line in the log; running clt meanwhile would hold the folder uv replaces
-            for _ in $(seq 1 90); do
-              grep -qE "^(Installed|error)" "$log" 2>/dev/null && break
-              sleep 2
+            waited=0
+            until grep -qE "(Installed [0-9]+ executable|error)" "$log" 2>/dev/null || [ "$waited" -ge 180 ]; do
+              sleep 2; waited=$((waited + 2))
             done
-            cat "$log"
+            echo "--- after ${waited}s, $log:"
+            ls -la "$log" || true
+            cat "$log" || true
+            echo "--- end of the log"
           fi
-          if [ "$("$bin/clt" --version)" != "clt $TARGET" ]; then
-            echo "::error::clt update $TARGET left $("$bin/clt" --version 2>&1 | tail -1)"; exit 1
-          fi
+          now="$("$bin/clt" --version 2>&1 | tail -1)"
+          echo "clt is now: $now"
+          [ "$now" = "clt $TARGET" ] || { echo "::error::clt update $TARGET left $now"; exit 1; }
