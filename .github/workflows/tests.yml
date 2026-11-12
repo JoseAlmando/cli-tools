@@ -108,3 +108,25 @@ jobs:
           for file in SKILL.md references/github.md references/jira.md references/azure-devops.md references/jenkins.md .clt-skill; do
             test -f "$home/.agents/skills/clt/$file" || { echo "::error::$file missing from the installed skill"; exit 1; }
           done
+
+      # clt update on the clt that uv installed: a real move to an older release, through uv (on Windows in the
+      # background, over the running clt.exe). Two jobs only: GitHub's API allows few calls without a token.
+      - name: clt update
+        if: matrix.python == '3.14' && matrix.os != 'macos-latest'
+        env:
+          TARGET: "0.10.0"
+        run: |
+          bin="$(uv tool dir --bin)"
+          log="$(python -c "import tempfile; print(tempfile.gettempdir())")/clt-update.log"
+          if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -u "$bin")"; log="$(cygpath -u "$log")"; fi
+          "$bin/clt" --json update --check
+          "$bin/clt" update "$TARGET"
+          for _ in $(seq 1 60); do
+            [ "$("$bin/clt" --version 2>/dev/null)" = "clt $TARGET" ] && break
+            sleep 2
+          done
+          if [ "$("$bin/clt" --version)" != "clt $TARGET" ]; then
+            [ -f "$log" ] && cat "$log"
+            echo "::error::clt update $TARGET left $("$bin/clt" --version)"; exit 1
+          fi
+          if [ "$RUNNER_OS" = Windows ]; then test -s "$log" || { echo "::error::no update log at $log"; exit 1; }; fi
