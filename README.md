@@ -40,8 +40,9 @@ Before installing a newer version, `clt update` lists what each release in betwe
 and fixes, from the release notes). It reinstalls with the tool that installed clt, `uv tool` or `pipx`, so there is
 never a second copy; for an install made with plain `pip` it prints the command to run instead.
 
-On Windows the update finishes in the background a few seconds after `clt update` returns, and writes its output to
-`clt-update.log` in the temporary folder (the message gives the path). To uninstall: `uv tool uninstall cli-tools`
+On Windows the update runs in the background once `clt update` has exited (Windows cannot replace a running
+`clt.exe`), and writes its output to `clt-update.log` in the temporary folder (the message gives the path). Wait until
+that file ends with `Installed …` before running `clt` again: running it meanwhile can interrupt the update. To uninstall: `uv tool uninstall cli-tools`
 (or `pipx uninstall cli-tools`).
 
 For development, from a clone (changes take effect right away; `clt update` then only reminds you to `git pull`):
