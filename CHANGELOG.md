@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.3 - 2026-11-12
+
+### Fixes
+
+- fix(skill): all-or-nothing install, a clearer refresh after clt update, and help on one line
+
+### Other
+
+- docs(api): promise a token renewal only where the tool has one
+
 ## 0.14.2 - 2026-11-12
 
 ### Fixes

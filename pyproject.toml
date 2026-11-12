@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-tools"
-version = "0.14.2"
+version = "0.14.3"
 description = "Command-line tools for the APIs of development services (Taiga, Gitea, GitHub, Jira, Azure DevOps, Jenkins)"
 readme = "README.md"
 requires-python = ">=3.9"
