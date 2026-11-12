@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 - 2026-11-12
+
+### Features
+
+- feat(completion): --install loads the completion in every new terminal, and LF line endings on Windows
+
 ## 0.15.0 - 2026-11-12
 
 ### Features
