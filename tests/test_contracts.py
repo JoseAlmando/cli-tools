@@ -49,7 +49,8 @@ for scripts and AI agents (any position on the command line):
   --json        errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only   send only GET requests (also CLT_READONLY=1);
                 login, refresh, logout and token are blocked too
-  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
+  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,
+                130 interrupted (Ctrl+C, or a question left without an answer)
 """
 ERROR_KEYS = {"error", "type", "exit_code", "status"}
 ME_KEYS = {"id", "username", "full_name", "email", "url", "credentials_file"}
@@ -217,9 +218,9 @@ class AliasTests(TempConf):
 
 
 class ExitCodeTests(TempConf):
-    def test_unknown_tool_is_an_error(self):
+    def test_unknown_tool_is_wrong_usage(self):
         code, out, err = run_process("clt", "nope")
-        self.assertEqual((code, out), (1, ""))
+        self.assertEqual((code, out), (2, ""))
         self.assertIn("Unknown tool 'nope'", err)
 
     def test_wrong_usage(self):
@@ -274,9 +275,27 @@ class JsonErrorTests(TempConf):
 
     def test_unknown_tool_ends_with_the_json_line(self):
         code, _, err = run_process("clt", "--json", "nope")
-        self.assertEqual(code, 1)
-        self.assertEqual(json_error(err), {"error": "Unknown tool 'nope'", "type": "ToolError", "exit_code": 1,
+        self.assertEqual(code, 2)
+        self.assertEqual(json_error(err), {"error": "Unknown tool 'nope'", "type": "UsageError", "exit_code": 2,
                                            "status": None})
+
+    def test_usage_errors_are_one_json_line_too(self):
+        for argv, message in ((["taiga", "api", "FOO", "x"], "clt taiga api: argument METHOD: invalid choice: 'FOO'"),
+                              (["gitea", "nope"], "clt gitea: argument COMMAND: invalid choice: 'nope'"),
+                              (["release", "--bump", "huge"], "clt release: argument --bump: invalid choice: 'huge'"),
+                              (["jenkins", "build", "Job", "latest"], "clt jenkins build: argument build:")):
+            with self.subTest(argv=argv):
+                code, out, err = run_process("clt", "--json", *argv)
+                self.assertEqual((code, out), (2, ""))
+                self.assertEqual(len(err.strip().splitlines()), 1, err)
+                line = json.loads(err)
+                self.assertEqual((set(line), line["type"], line["exit_code"]), (ERROR_KEYS, "UsageError", 2))
+                self.assertTrue(line["error"].startswith(message), line["error"])
+
+    def test_without_json_usage_errors_stay_argparse_text(self):
+        code, _, err = run_process("clt", "gitea", "nope")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("usage: clt gitea"), err)
 
     def test_read_only_error_as_json(self):
         code, _, err = run_process("clt", "taiga", "--json", "--read-only", "POST", "tasks", "-d", "{}",

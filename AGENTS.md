@@ -31,7 +31,7 @@ publish) and `clt update` (self-update). It is a Python package with **no runtim
    contents into the repo, an issue, a PR or a commit message. Use `taiga.example.com`, `gitea.example.com` in tests.
 7. **Never push, merge, tag, publish, or change GitHub settings without the owner's explicit OK** for that action.
 8. Keep behaviour backward compatible: commands, flags, environment variables, output formats, exit codes
-   (0 ok, 1 error, 2 usage, 3 not logged in, 4 read-only) and credential locations. `tests/test_contracts.py` pins them.
+   (0 ok, 1 error, 2 usage, 3 not logged in, 4 read-only, 130 interrupted) and credential locations. `tests/test_contracts.py` pins them.
 
 ## Checks before every commit
 

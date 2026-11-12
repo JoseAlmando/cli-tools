@@ -1,13 +1,18 @@
 """Expected errors, and the exit code each one ends the program with."""
 import json
 
-# Exit codes: 0 success, 1 error, 2 wrong usage (argparse), 3 not logged in, 4 blocked by read-only mode
-EXIT_ERROR, EXIT_USAGE, EXIT_NOT_LOGGED_IN, EXIT_READ_ONLY = 1, 2, 3, 4
+# Exit codes: 0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode, 130 interrupted
+EXIT_ERROR, EXIT_USAGE, EXIT_NOT_LOGGED_IN, EXIT_READ_ONLY, EXIT_INTERRUPTED = 1, 2, 3, 4, 130
 
 
 class ToolError(Exception):
     """An expected error; run() prints it without a traceback."""
     exit_code = EXIT_ERROR
+
+
+class UsageError(ToolError):
+    """Wrong arguments: an unknown tool, or what argparse rejects when --json asks for a JSON line."""
+    exit_code = EXIT_USAGE
 
 
 class NotLoggedIn(ToolError):

@@ -4,7 +4,7 @@ import sys
 
 from cli_tools import __version__, registry
 from cli_tools.core import agents, context, runner
-from cli_tools.core.errors import ToolError
+from cli_tools.core.errors import UsageError
 
 
 def usage():
@@ -21,7 +21,8 @@ def usage():
               "  --json        errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)",
               "  --read-only   send only GET requests (also CLT_READONLY=1);",
               "                login, refresh, logout and token are blocked too",
-              "  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode"]
+              "  exit codes    0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,",
+              "                130 interrupted (Ctrl+C, or a question left without an answer)"]
     return "\n".join(lines)
 
 
@@ -36,7 +37,7 @@ def main(argv, ctx=None):
     module = registry.find(argv[0])
     if module is None:
         print(usage(), file=sys.stderr)
-        raise ToolError(f"Unknown tool {argv[0]!r}")
+        raise UsageError(f"Unknown tool {argv[0]!r}")
     # Only the tool that runs is imported
     ctx = ctx or context.CLIContext.from_env()
     return importlib.import_module(module).main(argv[1:], ctx=ctx, prog=f"clt {registry.canonical(argv[0])}")

@@ -37,4 +37,4 @@ Rules: reads with `--json --read-only`. Writes only after the user agrees, shown
 
 ## Flags
 
-`--fields a,b.c` (nested fields come back as the flat key `"b.c"`; `{"value": [...]}` envelopes stay), `--table`, `--max-items N`, `--all` (every page), `-r` (raw body), `--dry-run`. Exit codes: 0 ok, 1 error (`"status"` on stderr), 2 usage, 3 not logged in, 4 blocked by read-only.
+`--fields a,b.c` (nested fields come back as the flat key `"b.c"`; `{"value": [...]}` envelopes stay), `--table`, `--max-items N`, `--all` (every page), `-r` (raw body), `--dry-run`. Exit codes: 0 ok, 1 error (`"status"` on stderr), 2 usage (a JSON line too), 3 not logged in, 4 blocked by read-only.
