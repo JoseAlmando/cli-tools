@@ -56,7 +56,8 @@ def cmd_me(t, args):
         from_env = bool(os.environ.get("TAIGA_TOKEN"))
         print(json.dumps({"id": me.get("id"), "username": me.get("username"), "full_name": me.get("full_name_display"),
                           "email": me.get("email"), "url": t.url,
-                          "credentials_file": None if from_env else str(t.credentials_file)}, ensure_ascii=False))
+                          "credentials_file": None if from_env else str(t.credentials_file),
+                          "token_source": "TAIGA_TOKEN" if from_env else "credentials_file"}, ensure_ascii=False))
         return
     print(f"{output.out.bold(me.get('full_name_display', ''))} ({output.out.cyan(me.get('username', '?'))}) on {t.url}")
     print(output.out.dim(f"Credentials: {t.credentials_file}"))
@@ -107,8 +108,9 @@ for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, refresh, logout and token are blocked too
-  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
-"""
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,
+                    130 interrupted
+""" + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Taiga API.", epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

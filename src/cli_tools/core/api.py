@@ -41,7 +41,7 @@ def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/", descrip
     p.add_argument("-d", "--data", metavar="JSON", help="JSON body, @file, or @- for stdin")
     p.add_argument("-r", "--raw", action="store_true", help="print the body exactly as received")
     p.add_argument("-i", "--headers", action="store_true", help="show the status and headers (on stderr)")
-    p.add_argument("-v", "--verbose", action="store_true", help="show the HTTP status code")
+    p.add_argument("-v", "--verbose", action="store_true", help="show the HTTP status code of each request (each page)")
     p.add_argument("--fields", metavar="LIST",
                    help="keep only these comma-separated fields of each object; dots reach nested ones "
                         "(e.g. ref,subject,status_extra_info.name)")
@@ -52,6 +52,13 @@ def add_api_parser(sub, prog, example_path, func, api_prefix="/api/v1/", descrip
                    help="print a list of objects as tab-separated lines under a header (fewer tokens than JSON)")
     p.add_argument("--dry-run", action="store_true", help="print the request that would be sent and send nothing")
     p.set_defaults(func=func)
+
+
+def options_help(prog):
+    """The end of a tool's --help: the api command's options work without typing "api" too."""
+    return (f"\napi options, also with the short form {prog} METHOD path:\n"
+            "  --fields LIST, --all, --max-items N, --table, --dry-run, -d JSON, -v, -i, -r\n"
+            f"  details: {prog} api --help\n")
 
 
 MINE_COLUMNS = ("kind", "id", "state", "title", "where")
@@ -145,8 +152,13 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         print(json.dumps({"method": args.method, "path": args.path,
                           "body": json.loads(body) if body else None}, ensure_ascii=False, indent=2))
         return 0
+    def sent(path, status):  # -v: one line per request, so --all shows how many pages it read
+        if args.verbose and not args.headers:
+            info(output.err.green(f"✓ {args.method} {path} -> HTTP {status}"))
+
     try:
         status, raw, headers = call(args.method, args.path, body)
+        sent(args.path, status)
         pages = [raw]
         path = args.path
         count = count_items(raw, items_key)
@@ -156,6 +168,7 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
                 more = True
                 break
             status, raw, headers = call("GET", path, None)
+            sent(path, status)
             pages.append(raw)
             count += count_items(raw, items_key)
     except HttpError as e:
@@ -175,8 +188,6 @@ def run_api(args, call, ctx=None, next_page=next_page_path, items_key=None, join
         return EXIT_ERROR
     if args.headers:
         output.print_headers(status, headers)
-    elif args.verbose:
-        info(output.err.green(f"✓ {args.method} {args.path} -> HTTP {status}"))
     if len(pages) == 1 and not (args.fields or args.max_items or getattr(args, "table", False)):
         output.print_response(raw, args.raw)
         return 0

@@ -53,7 +53,7 @@ for scripts and AI agents (any position on the command line):
                 130 interrupted (Ctrl+C, or a question left without an answer)
 """
 ERROR_KEYS = {"error", "type", "exit_code", "status"}
-ME_KEYS = {"id", "username", "full_name", "email", "url", "credentials_file"}
+ME_KEYS = {"id", "username", "full_name", "email", "url", "credentials_file", "token_source"}
 
 
 def _pyproject():
@@ -392,7 +392,8 @@ class SessionTests(TempConf):
         code, out, err, sent = run_inline("clt", "taiga", "--json", "me", routes=routes)
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"id": 7, "username": "bot", "full_name": "Bot User",
-                                           "email": "bot@example.com", "url": TAIGA, "credentials_file": str(creds)})
+                                           "email": "bot@example.com", "url": TAIGA, "credentials_file": str(creds),
+                                           "token_source": "credentials_file"})
         self.assertEqual([r.get_header("Authorization") for r in sent], ["Bearer tok-1", None, "Bearer tok-2"])
         self.assertIn("token renewed", err)
         self.assertNotIn("tok-", out + err)
@@ -408,7 +409,7 @@ class SessionTests(TempConf):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"id": 3, "username": "bot", "full_name": "Bot User",
                                            "email": "bot@example.com", "url": GITEA, "expires_at": 4102444800,
-                                           "credentials_file": str(creds)})
+                                           "credentials_file": str(creds), "token_source": "credentials_file"})
         self.assertEqual(sent[0].get_header("Authorization"), "Bearer tok-1")
 
         token = (200, json.dumps({"access_token": "tok-2", "refresh_token": "r2", "expires_in": 3600}), {})
@@ -432,7 +433,7 @@ class SessionTests(TempConf):
         code, out, _, sent = run_inline("clt", "--json", "github", "me", routes=routes)
         self.assertEqual(json.loads(out), {"id": 5, "username": "bot", "full_name": "Bot User",
                                            "email": "bot@example.com", "url": "https://github.com",
-                                           "credentials_file": str(creds)})
+                                           "credentials_file": str(creds), "token_source": "credentials_file"})
         self.assertEqual(sent[0].get_header("Accept"), "application/vnd.github+json")
         self.assertEqual(sent[0].get_header("Authorization"), "Bearer tok-1")
 
@@ -462,6 +463,7 @@ class SessionTests(TempConf):
                     self.assertEqual(code, 0)
                     self.assertEqual(json.loads(out)["credentials_file"],
                                      str(home / ".config" / tool / "credentials.json"))
+                    self.assertEqual(json.loads(out)["token_source"], "credentials_file")
 
     def test_jenkins_me_and_its_default_credentials_folder(self):
         home = Path(self.tmp.name) / "home"
@@ -471,8 +473,29 @@ class SessionTests(TempConf):
             write_json(home / ".config" / "jenkins" / "credentials.json",
                        {"url": JENKINS, "user": "reader", "token": "t"})
             code, out, _, sent = run_inline("clt", "jenkins", "--json", "me", routes=who)
-        self.assertEqual((code, json.loads(out)), (0, {"username": "reader", "authenticated": True, "url": JENKINS}))
+        self.assertEqual((code, json.loads(out)), (0, {"username": "reader", "authenticated": True, "url": JENKINS,
+                                                       "token_source": "credentials_file"}))
         self.assertTrue(sent[0].get_header("Authorization").startswith("Basic "))  # the saved session was used
+
+    def test_me_names_the_variable_a_token_came_from(self):
+        cases = [
+            ("taiga", {"TAIGA_URL": TAIGA, "TAIGA_TOKEN": "t"}, f"{TAIGA}/api/v1/users/me", "TAIGA_TOKEN"),
+            ("gitea", {"GITEA_URL": GITEA, "GITEA_TOKEN": "t"}, f"{GITEA}/api/v1/user", "GITEA_TOKEN"),
+            ("github", {"GH_TOKEN": "t"}, f"{GITHUB}/user", "GH_TOKEN"),
+            ("jira", {"JIRA_URL": JIRA, "JIRA_EMAIL": "e@example.com", "JIRA_TOKEN": "t"}, f"{JIRA}/rest/api/3/myself",
+             "JIRA_TOKEN"),
+            ("azdo", {"AZDO_ORG": "example", "AZURE_DEVOPS_EXT_PAT": "t"},
+             f"{AZDO}/_apis/connectionData?api-version=7.1-preview", "AZURE_DEVOPS_EXT_PAT"),
+            ("jenkins", {"JENKINS_URL": JENKINS, "JENKINS_USER": "u", "JENKINS_TOKEN": "t"},
+             f"{JENKINS}/whoAmI/api/json", "JENKINS_TOKEN"),
+            ("jenkins", {"JENKINS_URL": JENKINS}, f"{JENKINS}/whoAmI/api/json", None),  # anonymous
+        ]
+        body = json.dumps({"id": 1, "accountId": "a", "authenticatedUser": {"id": "a"}, "name": "u",
+                           "authenticated": True})
+        for tool, env, url, source in cases:
+            with self.subTest(tool=tool, source=source), mock.patch.dict(os.environ, env):
+                code, out, _, _ = run_inline("clt", tool, "--json", "me", routes={("GET", url): (200, body, {})})
+                self.assertEqual((code, json.loads(out)["token_source"]), (0, source))
 
     def test_a_token_from_the_environment_has_no_credentials_file(self):
         user = (200, json.dumps({"id": 1, "login": "bot"}), {})
@@ -526,6 +549,22 @@ class ApiCommandTests(TempConf):
                                           "--max-items", "5", routes=routes)
         self.assertEqual((code, json.loads(out)), (0, [{"number": 1}, {"number": 2}]))
         self.assertEqual(len(sent), 2)
+
+    def test_verbose_shows_every_page_it_fetched(self):
+        base = f"{GITEA}/api/v1/repos/o/r/pulls"
+        routes = {("GET", base): (200, '[{"number": 1}]', {"Link": f'<{base}?page=2>; rel="next"'}),
+                  ("GET", base + "?page=2"): (200, '[{"number": 2}]', {})}
+        code, _, err, _ = run_inline("clt", "gitea", "GET", "repos/o/r/pulls", "--all", "-v", routes=routes)
+        self.assertEqual(code, 0)
+        self.assertEqual([line.split("✓ ", 1)[1] for line in err.splitlines() if "✓ " in line],
+                         ["GET repos/o/r/pulls -> HTTP 200", "GET repos/o/r/pulls?page=2 -> HTTP 200"])
+
+    def test_each_tool_help_names_the_api_options(self):
+        for tool in ("taiga", "gitea", "github", "jira", "azdo", "jenkins"):
+            with self.subTest(tool=tool):
+                out = run_inline("clt", tool, "--help")[1]
+                for option in ("--fields", "--all", "--max-items", "--table", "--dry-run", f"clt {tool} api --help"):
+                    self.assertIn(option, out)
 
     def test_http_errors(self):
         routes = {("GET", f"{GITEA}/api/v1/repos/o/r"): (404, '{"message": "Not Found"}', {})}

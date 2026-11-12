@@ -227,7 +227,8 @@ class MeJsonTests(TempConf):
         out = self.run_me(taiga, {"id": 7, "username": "bot", "full_name_display": "Bot User", "email": "bot@example.com"},
                           {"CLT_JSON": "1"})
         self.assertEqual(json.loads(out), {"id": 7, "username": "bot", "full_name": "Bot User", "email": "bot@example.com",
-                                           "url": "https://taiga.example.com", "credentials_file": str(t.credentials_file)})
+                                           "url": "https://taiga.example.com", "credentials_file": str(t.credentials_file),
+                                           "token_source": "credentials_file"})
         self.assertNotIn("secret-token", out)
 
     def test_gitea_me_prints_one_json_object_with_the_expiry(self):
@@ -238,7 +239,8 @@ class MeJsonTests(TempConf):
         me = json.loads(out)
         self.assertEqual({k: v for k, v in me.items() if k != "expires_at"},
                          {"id": 3, "username": "bot", "full_name": "Bot User", "email": "bot@example.com",
-                          "url": "https://gitea.example.com", "credentials_file": str(g.credentials_file)})
+                          "url": "https://gitea.example.com", "credentials_file": str(g.credentials_file),
+                                           "token_source": "credentials_file"})
         self.assertIsInstance(me["expires_at"], int)
         self.assertNotIn("secret-token", out)
 

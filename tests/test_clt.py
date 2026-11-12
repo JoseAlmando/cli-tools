@@ -63,6 +63,19 @@ class VersionTests(unittest.TestCase):
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         self.assertEqual(__version__, re.search(r'^version = "([^"]+)"', pyproject.read_text(), re.M).group(1))
 
+    def test_an_install_from_a_branch_or_commit_shows_the_commit(self):
+        commit = "d1db6460f00dfeedbeef0123456789abcdef0123"
+        cases = [({"url": "https://github.com/o/r", "vcs_info": {"vcs": "git", "commit_id": commit,
+                                                                 "requested_revision": "feature/x"}}, "0.5.0+d1db646"),
+                 ({"url": "https://github.com/o/r", "vcs_info": {"vcs": "git", "commit_id": commit}}, "0.5.0+d1db646"),
+                 # A release installed by its tag, as clt update does, is the release itself
+                 ({"url": "https://github.com/o/r", "vcs_info": {"vcs": "git", "commit_id": commit,
+                                                                 "requested_revision": "v0.5.0"}}, "0.5.0"),
+                 ({"url": "file:///src", "dir_info": {}}, "0.5.0"), ({}, "0.5.0")]
+        for direct_url, expected in cases:
+            with self.subTest(direct_url=direct_url):
+                self.assertEqual(cli_tools._with_commit("0.5.0", direct_url), expected)
+
     def test_version_from_pyproject_reads_the_project_table(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "pyproject.toml"

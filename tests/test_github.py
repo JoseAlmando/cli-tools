@@ -219,7 +219,8 @@ class GitHubApiTests(TempConf):
             _, out, _ = run(["me"], {USER: (200, body, {})})
         self.assertEqual(json.loads(out), {"id": 5, "username": "bot", "full_name": "Bot User", "email": "bot@example.com",
                                            "url": "https://github.com",
-                                           "credentials_file": str(github.GitHub().credentials_file)})
+                                           "credentials_file": str(github.GitHub().credentials_file),
+                                           "token_source": "credentials_file"})
         self.assertNotIn("secret-token", out)
 
     def test_read_only_blocks_session_commands_and_writes(self):

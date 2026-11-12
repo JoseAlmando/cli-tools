@@ -238,7 +238,8 @@ class AzdoCliTests(TempConf):
         env = {"AZDO_ORG": "example", "AZDO_TOKEN": "pat"}
         _, out, _, _ = run(["me"], {("GET", CONNECTION): (200, USER)}, env=env, ctx=ctx)
         self.assertEqual(json.loads(out), {"id": "u-1", "username": "me@example.com", "full_name": "Bot User",
-                                           "email": "me@example.com", "url": ORG, "credentials_file": None})
+                                           "email": "me@example.com", "url": ORG, "credentials_file": None,
+                                           "token_source": "AZDO_TOKEN"})
         bare = {"authenticatedUser": {"id": "u-2", "providerDisplayName": "No Mail"}}
         _, out, _, _ = run(["me"], {("GET", CONNECTION): (200, bare)}, env=env, ctx=ctx)
         self.assertEqual((json.loads(out)["email"], json.loads(out)["username"]), (None, None))

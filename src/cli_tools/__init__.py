@@ -1,4 +1,5 @@
 """Command-line tools for the APIs of development services."""
+import json
 import re
 from importlib import metadata
 from pathlib import Path
@@ -36,7 +37,26 @@ def _find_version(source_pyproject, installed_version):
         return "0+unknown"
 
 
-__version__ = _find_version(Path(__file__).resolve().parents[2] / "pyproject.toml", lambda: metadata.version(NAME))
+def _with_commit(version, direct_url):
+    """An install from a branch or a commit (PEP 610's direct_url.json) shows it, such as 0.5.0+d1db646, so it is
+    not taken for the release; a release installed by its tag, as clt update does, is the release itself."""
+    vcs = direct_url.get("vcs_info") or {}
+    commit = vcs.get("commit_id")
+    if not commit or "+" in version or vcs.get("requested_revision") == f"v{version}":
+        return version
+    return f"{version}+{commit[:7]}"
+
+
+def _installed_version():
+    dist = metadata.distribution(NAME)
+    try:
+        direct_url = json.loads(dist.read_text("direct_url.json") or "{}")
+    except ValueError:
+        direct_url = {}
+    return _with_commit(dist.version, direct_url if isinstance(direct_url, dict) else {})
+
+
+__version__ = _find_version(Path(__file__).resolve().parents[2] / "pyproject.toml", _installed_version)
 
 
 def skill_dir():

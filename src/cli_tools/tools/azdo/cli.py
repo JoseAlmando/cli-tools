@@ -61,8 +61,8 @@ def cmd_me(azdo, args):
     credentials_file = None if creds.get("env") else str(azdo.credentials_file)
     if args.ctx.json_mode:
         print(json.dumps({"id": user.get("id"), "username": email, "full_name": user.get("providerDisplayName"),
-                          "email": email, "url": azdo.url, "credentials_file": credentials_file},
-                         ensure_ascii=False))
+                          "email": email, "url": azdo.url, "credentials_file": credentials_file,
+                          "token_source": creds.get("env") or "credentials_file"}, ensure_ascii=False))
         return
     print(f"{output.out.bold(str(user.get('providerDisplayName') or user.get('id')))}"
           + (f" ({output.out.cyan(email)})" if email else "") + f" on {azdo.url}")
@@ -128,8 +128,9 @@ for scripts and AI agents (any position on the command line):
   --json            errors as one JSON line on stderr, and me as JSON (also CLT_JSON=1)
   --read-only       send only GET requests (also CLT_READONLY=1);
                     login, logout and token are blocked too
-  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode
-"""
+  exit codes        0 success, 1 error, 2 wrong usage, 3 not logged in, 4 blocked by read-only mode,
+                    130 interrupted
+""" + api.options_help(prog)
     parser = argparse.ArgumentParser(prog=prog, description="Client for the Azure DevOps Services API.",
                                      epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

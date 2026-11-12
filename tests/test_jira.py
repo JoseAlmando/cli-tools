@@ -208,8 +208,8 @@ class JiraCliTests(TempConf):
         me = json.loads(out.getvalue())
         self.assertEqual(me, {"id": "acc-1", "username": "me@example.com", "full_name": "Bot User",
                               "email": "me@example.com", "url": SITE,
-                              "credentials_file": str(Jira(SITE).credentials_file)})
-        self.assertNotIn("tok", out.getvalue().replace("credentials", ""))
+                              "credentials_file": str(Jira(SITE).credentials_file), "token_source": "credentials_file"})
+        self.assertNotIn("tok", out.getvalue().replace("credentials", "").replace("token_source", ""))
 
     def test_logout_deletes_the_session(self):
         save_site_session()
