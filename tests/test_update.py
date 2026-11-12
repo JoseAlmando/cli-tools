@@ -215,6 +215,18 @@ class WaitThenRunTests(unittest.TestCase):
             self.assertEqual(done.returncode, 0)
             self.assertGreaterEqual(float(stamp.read_text()) - started, 1.5)
 
+    @unittest.skipUnless(os.name == "nt", "the waiting script uses the Windows API")
+    def test_the_installer_output_reaches_the_log_of_a_detached_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "clt-update.log"
+            with open(log, "w", encoding="utf-8") as out:
+                helper = subprocess.Popen([sys.executable, "-I", "-c", update.WAIT_THEN_RUN, "0", sys.executable, "-c",
+                                           "import sys; print('to stdout'); print('to stderr', file=sys.stderr)"],
+                                          stdout=out, stderr=subprocess.STDOUT, close_fds=True,
+                                          creationflags=update.DETACHED_PROCESS | update.CREATE_NEW_PROCESS_GROUP)
+            self.assertEqual(helper.wait(timeout=60), 0)
+            self.assertEqual(sorted(log.read_text(encoding="utf-8").split("\n")), ["", "to stderr", "to stdout"])
+
 
 if __name__ == "__main__":
     unittest.main()

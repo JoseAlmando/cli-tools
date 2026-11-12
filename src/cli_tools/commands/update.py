@@ -34,7 +34,8 @@ if handle:
     kernel32.WaitForSingleObject(handle, 120000)
     kernel32.CloseHandle(handle)
 time.sleep(1)  # the clt.exe launcher exits just after its python
-sys.exit(subprocess.run(sys.argv[2:]).returncode)
+# Explicit handles: without them Windows does not pass this process's log file on to the installer
+sys.exit(subprocess.run(sys.argv[2:], stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=sys.stderr).returncode)
 """
 
 
