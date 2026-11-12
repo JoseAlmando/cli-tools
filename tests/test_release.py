@@ -3,6 +3,7 @@ import datetime
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,7 @@ from cli_tools.core import errors, runner
 from cli_tools.core.errors import HttpError, ToolError
 from cli_tools.tools.gitea import client as gitea
 from cli_tools.tools.github import client as github
-from tests.helpers import GitRepo, TempConf, run_git
+from tests.helpers import GitRepo, TempConf, commit, make_repo, run_git
 
 PYPROJECT = '[project]\nname = "demo"\nversion = "0.1.0"\n'
 REMOTE = "https://github.com/o/r.git"
@@ -31,15 +32,30 @@ class TTY(io.StringIO):
 class ReleaseRepo(GitRepo):
     """A Python project at v0.1.0 with two commits since, whose origin looks like github.com/o/r."""
 
-    def setUp(self):
-        super().setUp()
-        self.commit("Add the project", {"pyproject.toml": PYPROJECT})
-        self.git("tag", "-a", "v0.1.0", "-m", "Release 0.1.0")
-        self.commit("feat: add x")
-        self.commit("Fix y")
-        self.git("push", "--quiet", "origin", "main", "v0.1.0")
+    @classmethod
+    def setUpClass(cls):
+        # Built once per class and copied for each test: about twenty git processes each, slow on Windows (#69)
+        super().setUpClass()
+        template = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(template.cleanup)
+        cls.template = Path(template.name)
+        origin, root = make_repo(cls.template)
+        commit(root, "Add the project", {"pyproject.toml": PYPROJECT})
+        run_git(root, "tag", "-a", "v0.1.0", "-m", "Release 0.1.0")
+        commit(root, "feat: add x")
+        commit(root, "Fix y")
+        run_git(root, "push", "--quiet", "origin", "main", "v0.1.0")
         # git talks to the bare repo, while the configured URL (what clt reads) is a GitHub one
-        self.git("config", "remote.origin.url", REMOTE)
+        run_git(root, "config", "remote.origin.url", REMOTE)
+
+    def setUp(self):
+        TempConf.setUp(self)  # not GitRepo.setUp: the repos come from the class's template
+        base = Path(self.tmp.name)
+        for name in ("origin.git", "work"):
+            shutil.copytree(self.template / name, base / name, symlinks=True)
+        self.origin, self.root = base / "origin.git", base / "work"
+        # The only absolute paths in the copied config: point them at this test's folder
+        self.git("config", "core.hooksPath", str(base / "no-hooks"))
         self.git("config", f"url.{self.origin}.insteadOf", REMOTE)
         env = mock.patch.dict(os.environ, {"GITHUB_TOKEN": "t"})
         env.start()
