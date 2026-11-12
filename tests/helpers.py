@@ -28,29 +28,37 @@ class GitRepo(TempConf):
 
     def setUp(self):
         super().setUp()
-        base = Path(self.tmp.name)
-        self.origin = base / "origin.git"
-        self.root = base / "work"
-        run_git(base, "init", "--quiet", "--bare", "-b", "main", str(self.origin))
-        run_git(base, "clone", "--quiet", str(self.origin), str(self.root))
-        for key, value in (("user.name", "Test"), ("user.email", "test@example.com"), ("commit.gpgsign", "false"),
-                           ("tag.gpgsign", "false"), ("core.hooksPath", str(base / "no-hooks"))):
-            self.git("config", key, value)
-        self.commit("Initial commit", {"README.md": "demo\n"})
-        self.git("push", "--quiet", "-u", "origin", "main")
-        self.git("remote", "set-head", "origin", "main")
+        self.origin, self.root = make_repo(Path(self.tmp.name))
 
     def git(self, *args):
         return run_git(self.root, *args)
 
     def commit(self, subject, files=None):
-        files = files or {f"change-{len(list(self.root.glob('change-*')))}.txt": subject + "\n"}
-        for name, text in files.items():
-            path = self.root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(text.encode("utf-8"))
-        self.git("add", "-A")
-        self.git("commit", "--quiet", "-m", subject)
+        commit(self.root, subject, files)
+
+
+def make_repo(base):
+    """(origin, root): a bare repo base/origin.git and its clone base/work, with one commit on main."""
+    origin, root = base / "origin.git", base / "work"
+    run_git(base, "init", "--quiet", "--bare", "-b", "main", str(origin))
+    run_git(base, "clone", "--quiet", str(origin), str(root))
+    for key, value in (("user.name", "Test"), ("user.email", "test@example.com"), ("commit.gpgsign", "false"),
+                       ("tag.gpgsign", "false"), ("core.hooksPath", str(base / "no-hooks"))):
+        run_git(root, "config", key, value)
+    commit(root, "Initial commit", {"README.md": "demo\n"})
+    run_git(root, "push", "--quiet", "-u", "origin", "main")
+    run_git(root, "remote", "set-head", "origin", "main")
+    return origin, root
+
+
+def commit(root, subject, files=None):
+    files = files or {f"change-{len(list(root.glob('change-*')))}.txt": subject + "\n"}
+    for name, text in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("utf-8"))
+    run_git(root, "add", "-A")
+    run_git(root, "commit", "--quiet", "-m", subject)
 
 
 def run_git(cwd, *args):
