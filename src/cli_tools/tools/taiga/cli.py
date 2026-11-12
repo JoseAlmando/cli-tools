@@ -31,6 +31,8 @@ def cmd_login(t, args):
 
 
 def cmd_refresh(t, args):
+    if os.environ.get("TAIGA_TOKEN"):
+        raise ToolError("A token from TAIGA_TOKEN is never renewed; unset it to renew the saved session")
     if not t.refresh(t.load_credentials()):
         raise ToolError("The server rejected the renewal; run " + output.err.bold(f"{PROG} login"))
     info(output.err.green("✓ ") + "Token renewed.")

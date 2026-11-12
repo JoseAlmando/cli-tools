@@ -23,6 +23,8 @@ def cmd_login(g, args):
 
 
 def cmd_refresh(g, args):
+    if os.environ.get("GITEA_TOKEN"):
+        raise ToolError("A token from GITEA_TOKEN is never renewed; unset it to renew the saved session")
     if not g.refresh(g.load_credentials()):
         raise ToolError("The server rejected the renewal; run " + output.err.bold(f"{PROG} login"))
     info(output.err.green("✓ ") + "Token renewed.")
