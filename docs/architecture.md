@@ -35,6 +35,7 @@ src/cli_tools/
 │                        (login, logout, me, jobs, queue, build, log, api)
 └── commands/            clt's own commands that are not API clients
     ├── release/         cli.py (clt release), versions.py (version files), gitrepo.py (git helpers)
+    ├── completion.py    clt completion: the Tab completion scripts, and the candidates read from each command's parser
     ├── skill.py         clt skill: install, uninstall and refresh the skill in the agents' folders
     └── update.py        clt update (then clt skill refresh)
 ```
@@ -102,7 +103,7 @@ Say the new service is Linear.
 
 ## Adding a clt command that is not an API client
 
-Put it in `src/cli_tools/commands/` (a module, or a package when it needs helpers, as `release/` does), give it the same `main(argv, ctx=None, prog="clt <name>")`, and add its line to `registry.py`. It may use a tool's client; a tool never imports a command.
+Put it in `src/cli_tools/commands/` (a module, or a package when it needs helpers, as `release/` does), give it the same `main(argv, ctx=None, prog="clt <name>")` and a `build_parser(prog)` (`clt completion` reads every command's parser; `tests/test_completion.py` checks they all have one), and add its line to `registry.py`. It may use a tool's client; a tool never imports a command.
 
 ## Development
 

@@ -45,6 +45,16 @@ On Windows the update runs in the background once `clt update` has exited (Windo
 that file ends with `Installed …` before running `clt` again: running it meanwhile can interrupt the update. To uninstall: `uv tool uninstall cli-tools`
 (or `pipx uninstall cli-tools`).
 
+Tab completion for tools, commands, options and their choices (`clt gi<Tab>` → `gitea github`, `clt release --bump
+<Tab>` → `fix feat major`). It is read from clt's own parsers each time, so it follows every update:
+
+```bash
+eval "$(clt completion bash)"                                # bash: add the line to ~/.bashrc
+eval "$(clt completion zsh)"                                 # zsh: in ~/.zshrc, after compinit
+clt completion fish > ~/.config/fish/completions/clt.fish    # fish
+clt completion powershell | Out-String | Invoke-Expression   # PowerShell: add the line to $PROFILE
+```
+
 For development, from a clone (changes take effect right away; `clt update` then only reminds you to `git pull`):
 
 ```bash

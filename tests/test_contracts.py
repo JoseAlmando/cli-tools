@@ -41,6 +41,7 @@ tools:
   release      bump the version, update the changelog, tag and publish a release
   update       install the latest release of clt, or a given version
   skill        install clt's skill for Claude Code, Codex or Gemini CLI
+  completion   print the Tab completion script for bash, zsh, fish or PowerShell
 
 Each tool has its own help: clt taiga --help, clt github --help.
 Short names for commands: login lg, refresh rfh, logout lo, token tk, issue i.
