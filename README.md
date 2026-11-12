@@ -156,7 +156,7 @@ Every tool can run unattended:
 
 - **No prompts.** Without a terminal, `login` fails at once instead of waiting unless you use an option such as `--token-stdin`. See the configuration table for environment variables that let you use an existing token.
 - **Machine-readable errors.** `--json` (or `CLT_JSON=1`) prints each error as one JSON line on stderr, with the HTTP status when available, and makes `me` print a JSON object. Jenkins reports `username`, `authenticated` and `url`; `clt jenkins log` always writes plain text.
-- **Exit codes:** `0` success, `1` error, `2` wrong usage, `3` not logged in, `4` blocked by read-only mode.
+- **Exit codes:** `0` success, `1` error, `2` wrong usage (an unknown tool or wrong arguments; with `--json` it is a JSON line too), `3` not logged in, `4` blocked by read-only mode, `130` interrupted (Ctrl+C, or a question left without an answer).
 - **Safe exploration.** `--read-only` (or `CLT_READONLY=1`) sends only `GET` requests and blocks `login`, `refresh`, `logout` and `token`, so it cannot change the saved session or print a token; `--dry-run` prints a request without sending it.
 - **Small answers.** `--fields ref,subject,status_extra_info.name` keeps only some fields, `--max-items N` cuts a list, `--all` joins every page, and `--table` prints a list as tab-separated lines under a header (an empty list prints the header when the columns are known, and `No items.` on stderr).
 - **One command for common reads.** `clt <tool> mine` lists your open work items on the issue tracking services; `clt azdo wiql "<query>"` runs a WIQL query, and `clt jenkins jobs` lists jobs in a folder. These commands work under `--read-only`.

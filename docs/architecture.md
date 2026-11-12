@@ -12,7 +12,7 @@ src/cli_tools/
 ├── registry.py          every command clt runs: (name, module, one-line description), and the short names
 ├── skill/               the skill for AI agents (SKILL.md, references/), shipped as package data
 ├── core/                shared building blocks, no service-specific code
-│   ├── errors.py        ToolError, NotLoggedIn, ReadOnlyError, HttpError, exit codes, error_detail
+│   ├── errors.py        ToolError, UsageError, NotLoggedIn, ReadOnlyError, HttpError, exit codes, error_detail
 │   ├── context.py       CLIContext (--json, --read-only), the global flags, require_terminal
 │   ├── output.py        colors, info(), printing JSON responses and headers
 │   ├── http.py          the configured server, api_url, safe_path, HTTPS without redirects, json_request, parse_json
@@ -52,7 +52,7 @@ Dependencies go one way:
 2. `run` sets up the output streams and takes `--json` and `--read-only` out of the arguments, wherever they are, into a `CLIContext` (the environment variables `CLT_JSON` and `CLT_READONLY` can turn them on too). It never writes them to `os.environ`, so the processes `clt` starts (a project's tests in `clt release`, `uv` in `clt update`) do not inherit them.
 3. `run` calls `main(argv, ctx=ctx)`. For `clt`, `cli.main` looks the first argument up in `registry.TOOLS`, imports that module and calls its `main(rest, ctx=ctx, prog="clt <name>")`.
 4. A tool's `main` parses its arguments with argparse, turns a short command name into the full one (`context.canonical_command`), checks read-only mode for the session commands (`ctx.check_session_command`), stores the context in `args.ctx`, and runs the command function with its client.
-5. Expected errors are `ToolError` subclasses; `run` prints them (one JSON line on stderr with `--json`) and returns their exit code: `0` success, `1` error, `2` wrong usage (argparse), `3` not logged in, `4` blocked by read-only mode.
+5. Expected errors are `ToolError` subclasses; `run` prints them (one JSON line on stderr with `--json`) and returns their exit code: `0` success, `1` error, `2` wrong usage (`UsageError`: an unknown tool, or what argparse rejects; with `--json`, `run` turns argparse's errors into `UsageError` so they are a JSON line too), `3` not logged in, `4` blocked by read-only mode, `130` interrupted.
 
 ### CLIContext
 
