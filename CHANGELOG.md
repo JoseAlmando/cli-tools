@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2 - 2026-11-12
+
+### Fixes
+
+- fix(jira): clear errors for odd answers, and ADF that keeps what it says
+- fix(azdo): compare organizations without case, and name the source of a bad one
+
 ## 0.14.1 - 2026-11-12
 
 ### Fixes
