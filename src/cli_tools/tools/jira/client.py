@@ -135,7 +135,7 @@ def next_page(headers, body=None, path=None):
         return None
     token = data.get("nextPageToken")
     if token:
-        sent = dict(urllib.parse.parse_qsl(path.partition("?")[2])).get("nextPageToken")
+        sent = dict(api.query_pairs(path.partition("?")[2])).get("nextPageToken")
         return api.set_query(path, {"nextPageToken": token}) if token != sent else None
     key = items_key(data)
     start, total = data.get("startAt"), data.get("total")

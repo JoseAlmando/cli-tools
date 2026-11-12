@@ -1,3 +1,6 @@
+import argparse
+import contextlib
+import io
 import json
 import os
 import socket
@@ -8,7 +11,9 @@ from pathlib import Path
 from unittest import mock
 
 from cli_tools.core import api, credentials, errors, http
+from cli_tools.core.context import CLIContext
 from cli_tools.core.errors import ToolError
+from cli_tools.tools.jira import client as jira
 
 
 class BaseUrlTests(unittest.TestCase):
@@ -157,15 +162,77 @@ class ShortcutTests(unittest.TestCase):
         self.assertEqual(api.with_api_shortcut([]), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SafePathTests(unittest.TestCase):
     def test_encodes_once_and_refuses_dot_segments(self):
-        from cli_tools.core import http
         self.assertEqual(http.safe_path("Demo Project/_apis/wit/workitems/$Task?q=a b&x=%20"),
                          "Demo%20Project/_apis/wit/workitems/$Task?q=a%20b&x=%20")
         for bad in ("a/../b", "./a", "a/%2e%2e/b"):
             with self.subTest(bad=bad), self.assertRaises(http.ToolError):
                 http.safe_path(bad)
+
+    def test_every_tool_refuses_dot_segments_through_api_url(self):
+        for bad in ("../users/me", "repos/./o", "repos/%2e%2e/o", "a/..?x=1"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ToolError, ". or .. segments"):
+                http.api_url("https://example.com", bad)
+        self.assertEqual(http.api_url("https://example.com", "a/b?q=../x"), "https://example.com/api/v1/a/b?q=../x")
+
+
+def api_args(path, **flags):
+    defaults = {"method": "GET", "path": path, "data": None, "dry_run": False, "all": True, "max_items": None,
+                "fields": None, "table": False, "raw": False, "headers": False, "verbose": False}
+    return argparse.Namespace(**{**defaults, **flags})
+
+
+class PagingTests(unittest.TestCase):
+    """run_api's --all loop, with a fake call(method, path, body) that answers each path."""
+
+    def fetch(self, first, pages, next_page=api.next_page_path, items_key=None, join=None):
+        self.sent = []
+
+        def call(method, path, body):
+            self.sent.append(path)
+            raw, headers = pages[path]
+            return 200, raw, headers
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = api.run_api(api_args(first), call, CLIContext(), next_page, items_key, join)
+        return code, json.loads(out.getvalue())
+
+    def test_a_later_page_that_is_not_json_is_an_error(self):
+        link = {"Link": '<https://h.example/api/v1/x?page=2>; rel="next"'}
+        pages = {"x": ('[{"id": 1}]', link), "x?page=2": ("<html>Bad gateway</html>", {})}
+        with self.assertRaisesRegex(ToolError, "page 2 of x is not JSON"):
+            self.fetch("x", pages)
+
+    def test_all_gives_the_same_shape_for_one_page_or_several(self):
+        one = {"search": (json.dumps({"issues": [{"key": "A-1"}], "isLast": True}), {})}
+        several = {"search": (json.dumps({"issues": [{"key": "A-1"}], "nextPageToken": "t"}), {}),
+                   "search?nextPageToken=t": (json.dumps({"issues": [{"key": "A-2"}], "isLast": True}), {})}
+        hooks = {"next_page": jira.next_page, "items_key": jira.items_key, "join": jira.join}
+        self.assertEqual(self.fetch("search", one, **hooks), (0, {"issues": [{"key": "A-1"}]}))
+        self.assertEqual(self.fetch("search", several, **hooks), (0, {"issues": [{"key": "A-1"}, {"key": "A-2"}]}))
+
+    def test_a_token_cycle_or_an_empty_page_stops_the_paging(self):
+        hooks = {"next_page": jira.next_page, "items_key": jira.items_key, "join": jira.join}
+        def page(key, token):
+            return json.dumps({"issues": [{"key": key}] if key else [], "nextPageToken": token}), {}
+
+        cycle = {"s": page("A-1", "A"), "s?nextPageToken=A": page("A-2", "B"), "s?nextPageToken=B": page("A-3", "A")}
+        self.assertEqual(self.fetch("s", cycle, **hooks)[1], {"issues": [{"key": "A-1"}, {"key": "A-2"}, {"key": "A-3"}]})
+        self.assertEqual(self.sent, ["s", "s?nextPageToken=A", "s?nextPageToken=B"])
+        empty = {"s": page("A-1", "A"), "s?nextPageToken=A": page(None, "B"), "s?nextPageToken=B": page(None, "C")}
+        self.fetch("s", empty, **hooks)
+        self.assertEqual(self.sent, ["s", "s?nextPageToken=A"])
+
+    def test_set_query_splits_only_on_ampersands(self):
+        # Python 3.9.0 and 3.9.1 also split on ";", as if this were the old parse_qsl
+        def old_parse_qsl(query, keep_blank_values=False, **kwargs):
+            return [tuple(pair.split("=", 1)) for part in query.split("&") for pair in part.split(";") if pair]
+
+        with mock.patch.object(api.urllib.parse, "parse_qsl", old_parse_qsl):
+            self.assertEqual(api.set_query("search?jql=a%3Bb;c&x=1", {"x": "2"}), "search?jql=a%3Bb%3Bc&x=2")
+
+
+if __name__ == "__main__":
+    unittest.main()

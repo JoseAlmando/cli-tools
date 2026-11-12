@@ -550,6 +550,14 @@ class ApiCommandTests(TempConf):
         self.assertEqual((code, json.loads(out)), (0, [{"number": 1}, {"number": 2}]))
         self.assertEqual(len(sent), 2)
 
+    def test_dot_segments_are_refused_by_every_tool_before_any_request(self):
+        env = {"GITHUB_TOKEN": "t", "AZDO_ORG": "example", "AZDO_TOKEN": "t"}
+        for tool in ("taiga", "gitea", "github", "azdo"):
+            with self.subTest(tool=tool), mock.patch.dict(os.environ, env):
+                code, _, err, sent = run_inline("clt", tool, "GET", "_apis/../x")
+                self.assertEqual((code, sent), (1, []))
+                self.assertIn("'_apis/../x'", err)  # as given: Azure DevOps adds api-version after the check
+
     def test_verbose_shows_every_page_it_fetched(self):
         base = f"{GITEA}/api/v1/repos/o/r/pulls"
         routes = {("GET", base): (200, '[{"number": 1}]', {"Link": f'<{base}?page=2>; rel="next"'}),
