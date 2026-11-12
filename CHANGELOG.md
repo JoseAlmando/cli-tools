@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0 - 2026-11-12
+
+### Features
+
+- feat(jenkins): client for the Jenkins API with jobs, builds, queue and console logs
+
+### Fixes
+
+- fix(jenkins): print the header of an empty table, and pin the me output
+- fix(release): --publish --dry-run prints what is missing and changes nothing
+
+### Other
+
+- ci: check the Jenkins reference in the installed skill
+- docs: clt is the only command a checkout installs
+
 ## 0.9.1 - 2026-11-10
 
 ### Fixes
