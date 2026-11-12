@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 - 2026-11-12
+
+### Features
+
+- feat(jenkins): log --tail N prints only the last lines of a build console
+
 ## 0.11.1 - 2026-11-12
 
 ### Fixes
