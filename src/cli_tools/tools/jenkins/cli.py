@@ -70,7 +70,15 @@ def cmd_build(jenkins, args):
 
 def cmd_log(jenkins, args):
     _, raw, _ = jenkins.call("GET", f"{build_path(args)}/consoleText", None)
+    if args.tail is not None:  # cut here: Jenkins' progressiveText only skips from the start
+        raw = "".join(raw.splitlines(keepends=True)[-args.tail:]) if args.tail else ""
     sys.stdout.write(raw)
+
+
+def line_count(value):
+    if not (value.isascii() and value.isdecimal()):
+        raise argparse.ArgumentTypeError("expected a number of lines, 0 or more")
+    return int(value)
 
 
 def build_selector(value):
@@ -89,7 +97,7 @@ examples:
   {prog} login --url https://jenkins.example.com --user <username>
   {prog} --json --read-only jobs "Folder/Subfolder"
   {prog} --json --read-only build "Folder/Job" lastSuccessfulBuild
-  {prog} --json --read-only log "Folder/Job" 42
+  {prog} --json --read-only log "Folder/Job" 42 --tail 200
   {prog} --json --read-only queue --table
   {prog} --json --read-only GET "api/json?tree=jobs[name,color]"
 
@@ -128,6 +136,9 @@ Without credentials, requests use Jenkins' anonymous permissions. API tokens do 
         p.add_argument("job", help="full job name, e.g. Folder/Job")
         p.add_argument("build", nargs="?", default="lastBuild", type=build_selector,
                        help="build number or permalink (default lastBuild)")
+        if name == "log":
+            p.add_argument("--tail", type=line_count, metavar="N",
+                           help="print only the last N lines, where a failure usually is")
         p.set_defaults(func=func)
     api.add_api_parser(sub, prog, "job/Example/api/json", cmd_api, api_prefix="/",
                        description="Call a path relative to the Jenkins controller. JSON API paths end in /api/json.")
